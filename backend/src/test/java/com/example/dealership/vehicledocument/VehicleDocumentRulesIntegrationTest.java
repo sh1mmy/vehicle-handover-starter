@@ -103,6 +103,24 @@ class VehicleDocumentRulesIntegrationTest {
                 .andExpect(jsonPath("$.status").value("PENDING"));
     }
 
+    @Test
+    void replacesVerifiedDocumentByRejectingItAndAddingNewOne() throws Exception {
+        // Policy renewal: a verified document that is no longer valid is rejected, then a new one is added.
+        Long verifiedId = create(INVOICE_BODY);
+        changeStatus(verifiedId, "VERIFIED").andExpect(status().isOk());
+
+        mockMvc.perform(post(documentsUrl()).contentType(MediaType.APPLICATION_JSON).content(INVOICE_BODY))
+                .andExpect(status().isConflict());
+
+        changeStatus(verifiedId, "REJECTED")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+
+        mockMvc.perform(post(documentsUrl()).contentType(MediaType.APPLICATION_JSON).content(INVOICE_BODY))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
     private Long create(String body) throws Exception {
         String response = mockMvc.perform(post(documentsUrl()).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())

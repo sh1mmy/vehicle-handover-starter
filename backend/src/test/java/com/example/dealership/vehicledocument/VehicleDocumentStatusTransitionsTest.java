@@ -13,13 +13,13 @@ class VehicleDocumentStatusTransitionsTest {
             "PENDING, REJECTED, true",
             "PENDING, PENDING, false",
             "VERIFIED, VERIFIED, false",
-            "VERIFIED, REJECTED, false",
+            "VERIFIED, REJECTED, true",
             "VERIFIED, PENDING, false",
             "REJECTED, REJECTED, false",
             "REJECTED, VERIFIED, false",
             "REJECTED, PENDING, false"
     })
-    void allowsOnlyVerifyingOrRejectingPendingDocument(VehicleDocumentStatus from, VehicleDocumentStatus to,
+    void allowsVerifyingOrRejectingPendingAndRejectingVerifiedDocument(VehicleDocumentStatus from, VehicleDocumentStatus to,
             boolean allowed) {
         assertThat(VehicleDocumentStatusTransitions.isAllowed(from, to)).isEqualTo(allowed);
     }

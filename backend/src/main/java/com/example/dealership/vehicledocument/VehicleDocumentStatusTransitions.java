@@ -1,8 +1,12 @@
 package com.example.dealership.vehicledocument;
 
 /**
- * Allowed document status changes: a pending document is either verified or rejected.
- * A verified or rejected document never changes again; a correction is a new document (INTENT.md S1, Z3).
+ * Allowed document status changes (INTENT.md R6, Z3):
+ * <ul>
+ *     <li>a pending document is verified or rejected;</li>
+ *     <li>a verified document can still be rejected, e.g. an expired policy that is replaced by a new one;</li>
+ *     <li>a rejected document never changes again; a correction is a new document (S1).</li>
+ * </ul>
  */
 public final class VehicleDocumentStatusTransitions {
 
@@ -10,7 +14,10 @@ public final class VehicleDocumentStatusTransitions {
     }
 
     public static boolean isAllowed(VehicleDocumentStatus from, VehicleDocumentStatus to) {
-        return from == VehicleDocumentStatus.PENDING
-                && (to == VehicleDocumentStatus.VERIFIED || to == VehicleDocumentStatus.REJECTED);
+        return switch (from) {
+            case PENDING -> to == VehicleDocumentStatus.VERIFIED || to == VehicleDocumentStatus.REJECTED;
+            case VERIFIED -> to == VehicleDocumentStatus.REJECTED;
+            case REJECTED -> false;
+        };
     }
 }

@@ -250,3 +250,35 @@ Do tego helper w nowym teście checkboxa: samo zdarzenie `change` nie aktualizuj
 - **P3.3: `GET .../documents/{id}` i ekran szczegółów dokumentu** wykraczają poza kontrakt.
   - Są zgodne z konwencją modułu pojazdów i potrzebne dla nagłówka `Location` po POST.
   - Zostają.
+
+## Po oddaniu: dziura w regule przejść statusu (moja interpretacja)
+
+**Problem:**
+- Z3 dopuszczało zmianę statusu tylko z `PENDING`, więc `VERIFIED → REJECTED` dawało 409.
+- W połączeniu z R7 (jeden aktywny dokument danego typu) dawało to ślepy zaułek. Scenariusz odnowienia polisy:
+  1. polisa OC jest `VERIFIED`, ale wygasa przed datą wydania, więc gotowość pokazuje `EXPIRED`;
+  2. nowej polisy nie da się dodać, bo jest już aktywny dokument tego typu (409);
+  3. starej nie da się odrzucić, bo `VERIFIED → REJECTED` daje 409.
+- Pojazd zostaje na zawsze niegotowy do wydania.
+
+**Jak wyłapane:**
+- Przegląd niejasności po oddaniu, przez właściciela, a nie przez AI.
+- Pytanie P2 było zapisane w INTENT. Przyjęte założenie (najbardziej restrykcyjne) nie zostało jednak sprawdzone na scenariuszu, który łączy dwie reguły.
+- Testy tego nie wyłapały, bo każda reguła miała testy osobno, a nie było testu przepływu „dokument przestał być ważny i trzeba go zastąpić”.
+
+**Decyzja:**
+- Dozwolone są `PENDING → VERIFIED`, `PENDING → REJECTED` i `VERIFIED → REJECTED`, reszta daje 409.
+- `REJECTED` zostaje stanem końcowym, jak chciała Anna („odrzucony dokument zostaje odrzucony, poprawka to nowy dokument”), więc S1 obowiązuje bez zmian.
+- Zaktualizowane: R6, przypadki brzegowe w §2, Z3 i P2 w INTENT.md.
+- P2 zostaje częściowo otwarte: czy odrzucenie zweryfikowanego dokumentu wymaga uprawnień albo zapisania powodu (P9).
+
+**Testy (test-first, najpierw czerwone):**
+- `VehicleDocumentStatusTransitionsTest`: `VERIFIED, REJECTED` zmienione z `false` na `true`. To zmiana wymagania, a nie test dopasowany do kodu.
+- `VehicleDocumentRulesIntegrationTest.replacesVerifiedDocumentByRejectingItAndAddingNewOne`:
+  - zweryfikowany dokument blokuje nowy tego typu (409);
+  - po odrzuceniu (200) nowy dokument daje 201 i `PENDING`.
+- Przed zmianą w `VehicleDocumentStatusTransitions` oba testy padały: pierwszy na wierszu `VERIFIED, REJECTED`, drugi z 409 zamiast 200.
+
+**Wniosek:** reguły, które się nawzajem ograniczają (tu: przejścia statusu i jeden aktywny dokument typu), trzeba sprawdzić na scenariuszu przepływu, a nie tylko każdą osobno.
+
+**Otwarte w UI:** przycisk Reject jest na liście dokumentów tylko przy `PENDING`. API pozwala już odrzucić zweryfikowany dokument, ale w UI nie ma do tego przycisku.
