@@ -1,5 +1,6 @@
 package com.example.dealership.customer;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -22,6 +23,9 @@ import com.example.dealership.error.ConflictException;
 import com.example.dealership.error.NotFoundException;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -128,6 +132,46 @@ class CustomerControllerTest {
                 .andExpect(jsonPath("$.errors[0].message").value(PHONE_FORMAT_MESSAGE));
 
         verifyNoInteractions(customerService);
+    }
+
+    @ParameterizedTest(name = "nip \"{0}\"")
+    @ValueSource(strings = {"123456789", "12345678901", "123-456-78-90", "123 456 78 90", ""})
+    void createReturnsBadRequestProblemWithFieldErrorWhenNipHasInvalidFormat(String nip) throws Exception {
+        String body = VALID_BODY.replace("\"nip\": \"1234567890\"", "\"nip\": \"" + nip + "\"");
+
+        mockMvc.perform(post("/api/customers").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("nip"))
+                .andExpect(jsonPath("$.errors[0].message").value("must be exactly 10 digits"));
+
+        verifyNoInteractions(customerService);
+    }
+
+    @Test
+    void createAcceptsMissingNip() throws Exception {
+        ArgumentCaptor<CustomerRequest> captor = ArgumentCaptor.forClass(CustomerRequest.class);
+        when(customerService.create(captor.capture())).thenReturn(response());
+        String body = VALID_BODY.replace(",\n  \"nip\": \"1234567890\"", "");
+
+        mockMvc.perform(post("/api/customers").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+
+        assertThat(body).doesNotContain("nip");
+        assertThat(captor.getValue().nip()).isNull();
+    }
+
+    @Test
+    void createAcceptsNullNip() throws Exception {
+        ArgumentCaptor<CustomerRequest> captor = ArgumentCaptor.forClass(CustomerRequest.class);
+        when(customerService.create(captor.capture())).thenReturn(response());
+        String body = VALID_BODY.replace("\"nip\": \"1234567890\"", "\"nip\": null");
+
+        mockMvc.perform(post("/api/customers").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+
+        assertThat(captor.getValue().nip()).isNull();
     }
 
     @Test

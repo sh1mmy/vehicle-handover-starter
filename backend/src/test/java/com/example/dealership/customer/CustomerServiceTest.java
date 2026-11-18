@@ -89,6 +89,19 @@ class CustomerServiceTest {
     }
 
     @Test
+    void updateKeepsOwnEmail() {
+        Customer customer = customer(EMAIL);
+        when(customerRepository.findById(1L)).thenReturn(Optional.of(customer));
+        when(customerRepository.existsByEmailAndIdNot(EMAIL, 1L)).thenReturn(false);
+        when(customerRepository.save(customer)).thenReturn(customer);
+
+        CustomerResponse response = customerService.update(1L, request(EMAIL));
+
+        assertThat(response.email()).isEqualTo(EMAIL);
+        verify(customerRepository).save(customer);
+    }
+
+    @Test
     void updateThrowsConflictWhenEmailBelongsToAnotherCustomer() {
         when(customerRepository.findById(1L)).thenReturn(Optional.of(customer(EMAIL)));
         when(customerRepository.existsByEmailAndIdNot(OTHER_EMAIL, 1L)).thenReturn(true);
