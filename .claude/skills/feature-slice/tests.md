@@ -24,6 +24,8 @@ Setup:
 | `createReturnsBadRequestProblemWithFieldErrorWhen<Enum>IsUnknown` (per enum) | 400, message `must be one of: A, B` in enum order |
 | `createReturnsBadRequestProblemWithFieldErrorWhenValueHasWrongType` | a number field sent as a string, message `has an invalid value` |
 | `createReturnsBadRequestProblemWithFieldErrorWhen<Field>HasInvalidFormat` (one per `@Pattern` / `@Email` field not broken in `invalidBody()`) | one invalid value replaced in `VALID_BODY`, `$.errors.length()` = 1, the field and its exact message, `verifyNoInteractions(service)` |
+| the same test as a `@ParameterizedTest` with `@ValueSource(strings = {...})` for every `@Pattern` field | the boundaries of the pattern: one character too short, one too long, each forbidden separator or format variant from the description (e.g. `123-456-78-90`, `123 456 78 90`), and the empty string `""`; each gives 400 on that field with its exact message |
+| `createAccepts{Missing,Null}<Field>` (one pair per optional field) | the field removed from `VALID_BODY`, and the field set to `null`: 201, an `ArgumentCaptor` shows the request value is `null` |
 | `createReturnsBadRequestProblemWhenBodyIsNotJson` | `field` null, `request body must be valid JSON` |
 | `createReturnsConflictProblemWhen<Unique>AlreadyExists` | 409, the exact conflict message |
 | `createReturnsConflictProblemWhenDatabaseConstraintIsViolated` | service throws `DataIntegrityViolationException("uq_<table>_<column>")`, `detail` = `Request conflicts with existing data` |
@@ -54,6 +56,7 @@ Setup:
 | `createSaves<Entity>` | `save` answers its argument, one assert per field |
 | `createThrowsConflictWhen<Unique>AlreadyExists` | exact message, `verify(repository, never()).save(any())` |
 | `updateChangesExisting<Entity>` | the entity is mutated, `verify(repository).save(entity)` |
+| `updateKeepsOwn<Unique>` | update with the entity's own unchanged unique value: `existsBy<Unique>AndIdNot(<UNIQUE>, 1L)` false, no exception, `verify(repository).save(entity)` |
 | `updateThrowsConflictWhen<Unique>BelongsToAnother<Entity>` | `existsBy<Unique>AndIdNot(OTHER, 1L)` true, `never().save` |
 | `updateThrowsNotFoundWhen<Entity>DoesNotExist` | exact message |
 | `deleteRemovesExisting<Entity>` | `verify(repository).delete(entity)` |
