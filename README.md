@@ -50,3 +50,32 @@ Stop both applications with `Ctrl+C`.
 Runs the backend tests (`./mvnw test` in `backend/`) and the frontend tests
 (`npm test` in `frontend/`). Both parts always run and a summary of both is printed at the
 end. The script exits with a non-zero code if any test fails.
+
+## Oddanie zadania
+
+### Gdzie co jest
+| Element | Miejsce |
+|---|---|
+| Wymagania, pytania do klienta, założenia, poza zakresem | [INTENT.md](INTENT.md) |
+| Gdzie AI się pomyliło, co zrobione ręcznie i dlaczego | [DECISIONS.md](DECISIONS.md) |
+| Kontekst dla agenta (konwencje projektu) | [CLAUDE.md](CLAUDE.md) |
+| Skill `feature-slice` (Agent Skills) | [.claude/skills/feature-slice/](.claude/skills/feature-slice/): `SKILL.md` + `backend.md`, `frontend.md`, `tests.md` |
+| Logi sesji z AI | `ai-logs/` |
+
+Feature B (klienci, `/api/customers`) jest wygenerowany wyłącznie skillem. Feature A (dokumenty pojazdu i gotowość do wydania) ma szkielet ze skilla, a reguły biznesowe, endpoint gotowości i UI akcji zostały dopisane ręcznie, test-first. Podział jest opisany w DECISIONS.md.
+
+### Testy
+```bash
+./test.sh
+```
+Skrypt uruchamia testy backendu i frontendu i wymaga JDK 21 (patrz „Requirements”). Jeśli `JAVA_HOME` w systemie wskazuje inną wersję, ustaw go tylko dla tego polecenia, np. `JAVA_HOME=/ścieżka/do/jdk-21 ./test.sh`.
+
+### Logi AI
+W `ai-logs/` są surowe pliki `.jsonl` sesji Claude Code skopiowane z `~/.claude/projects/` dla tego repozytorium, bez wycinania. Jedyna zmiana to zamaskowany adres e-mail.
+
+### Jak pracowałem z AI
+- **Jedna sesja Claude Code, krok po kroku.** O zakresie, założeniach i kolejności decydowałem ja. AI proponowało i implementowało. Każdy diff przeglądałem przed commitem, a commit powstawał dopiero po mojej akceptacji.
+- **Skill testowany na dwóch encjach.** Klienci powstali w dwóch iteracjach: wynik pierwszej został wycofany, skill poprawiony i encja wygenerowana ponownie, bez ręcznych poprawek. Potem szkielet dokumentów pojazdu (zasób zagnieżdżony, podzbiór operacji). Po każdym przebiegu luki skilla trafiały do jego tekstu.
+- **Niezależna recenzja.** Cały diff przejrzał osobny subagent tylko do odczytu, względem kontraktu API, INTENT.md i CLAUDE.md. Co z recenzji poprawiłem, a co świadomie zostawiłem, opisuje DECISIONS.md.
+
+Na co dzień pracuję z Claude Code i Codexem we własnym orkiestratorze: routing zadań między modelami, cross-model review przed merge i weryfikacja zadania względem kodu. Tutaj w wersji uproszczonej.
