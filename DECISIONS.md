@@ -56,9 +56,8 @@ Wygenerowane skillem `/feature-slice` z opisu: firstName, lastName, email (unika
 2. **Brak testu formatu dla każdego pola z `@Pattern` / `@Email`.** `invalidBody()` łamało `email` i `nip`, ale wzorca telefonu nie sprawdzał żaden wymagany test. Test dla telefonu dopisano ad hoc, poza listą ze skilla.
 3. **Wzorzec telefonu `(?=.{9,20}$)\+?[0-9 -]+` przepuszcza same separatory** (np. `"---------"`), bo składa się wyłącznie ze znaków opcjonalnych.
 4. **Rozjazd z `INTENT.md`.** Pusty string w `nip` przez API dostaje 400 (nie pasuje do `\d{10}`), a INTENT obiecywał 201 i `null`. Formularz wysyła `null`, więc w UI tego nie widać.
-5. **Drobne, bez zmian w skillu (do decyzji później):**
-   - Nagłówek detalu według reguły „pierwsze pole tekstowe” to samo `Jan` zamiast `Jan Kowalski`.
-   - Encja bez pola liczbowego nie ma oczywistego wariantu testu „zły typ wartości”. Agent wysłał `{}` w polu tekstowym.
+5. **Nagłówek detalu.** Według reguły „pierwsze pole tekstowe” wychodziło samo `Jan` zamiast `Jan Kowalski`. Poprawione w skillu w `07f7d4e` (patrz niżej).
+6. **Drobne, bez zmian w skillu (do decyzji później):** encja bez pola liczbowego nie ma oczywistego wariantu testu „zły typ wartości”. Agent wysłał `{}` w polu tekstowym.
 
 ### Co poprawiliśmy w skillu
 - **Pułapki w `SKILL.md`:**
@@ -66,4 +65,26 @@ Wygenerowane skillem `/feature-slice` z opisu: firstName, lastName, email (unika
   - wzorzec ma zaczynać się i kończyć znakiem wymaganym, a limit długości idzie do lookahead;
   - pole z `@Pattern` / `@Email` bez testu formatu.
 - **`tests.md`:** każde pole z `@Pattern` / `@Email` musi być złamane w `invalidBody()` albo mieć własny test `createReturnsBadRequestProblemWithFieldErrorWhen<Field>HasInvalidFormat` z dokładnym komunikatem.
+- **Nagłówek detalu w `SKILL.md`:** pola, po których człowiek rozpoznaje rekord (`firstName` + `lastName`, `name`, `title`, `number`), łączone spacją jak `make` + `model` w pojazdach. Domyślnie pierwsze pole tekstowe.
 - **`INTENT.md` R21:** pusty string w `nip` daje 400. Brak pola lub `null` oznacza brak NIP-u.
+
+## Feature B: klienci, iteracja 2
+
+Wygenerowane poprawionym skillem z doprecyzowanym opisem telefonu: 9–20 znaków, opcjonalny `+`, cyfry rozdzielone pojedynczymi spacjami lub myślnikami, początek i koniec cyfrą. Commit `3cdc404`.
+
+### Wynik
+- `./test.sh` był zielony w pierwszej rundzie pętli walidacji: backend 57 testów, frontend 18.
+- Zero ręcznych poprawek kodu. Prettier nie zmienił żadnego wygenerowanego pliku w `customers/`.
+- `git status` przed commitem pokazywał tylko pliki dozwolone w kroku 4 skilla.
+
+### Co się poprawiło względem iteracji 1
+- **Escape w regexie:** `@Pattern` ma podwojone backslashe (`"(?=.{9,20}$)\\+?[0-9]+([ -][0-9]+)*"`) i kompiluje się od razu.
+- **Telefon:** wzorzec zaczyna się i kończy cyfrą, więc nie przechodzą same separatory, podwójne separatory (`600--100-200`) ani spacja na końcu.
+- **Testy formatu:**
+  - `email` i `nip` są złamane w `invalidBody()`, z asertowanymi komunikatami.
+  - `phone` ma własny test `createReturnsBadRequestProblemWithFieldErrorWhenPhoneHasInvalidFormat`.
+  - Spec formularza wysyła też zły telefon w teście „leaves format and range rules to the backend”.
+- **Nagłówek detalu:** `firstName lastName`, czyli `Jan Kowalski`.
+
+### Co zostaje otwarte
+- Test „zły typ wartości” dla encji bez pola liczbowego nadal wysyła `{}` w polu tekstowym. Skill tego przypadku nie opisuje.
