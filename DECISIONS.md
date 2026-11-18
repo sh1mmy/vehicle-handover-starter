@@ -88,3 +88,70 @@ Wygenerowane poprawionym skillem z doprecyzowanym opisem telefonu: 9–20 znakó
 
 ### Co zostaje otwarte
 - Test „zły typ wartości” dla encji bez pola liczbowego nadal wysyła `{}` w polu tekstowym. Skill tego przypadku nie opisuje.
+
+## Feature A: co dał skill, co ręcznie
+
+### Co wygenerował skill (commit `990ac4f`)
+Wywołanie `/feature-slice`: `VehicleDocument` zagnieżdżony pod `Vehicle`, segment `documents`, operacje list, get, create.
+
+Pola:
+- `type` (enum z kontraktu);
+- `number`;
+- `issueDate`: nie z przyszłości, przez app `Clock`;
+- opcjonalne `expiryDate`;
+- `status`: tylko do odczytu, `PENDING` przy tworzeniu.
+
+Wynik:
+- **Backend:**
+  - migracja `V6__vehicle_document.sql`: FK `vehicle_id` bez kaskady, dokumenty bez seedu;
+  - encja, dwa enumy, repozytorium (`findAllByVehicleId`, `findByIdAndVehicleId`), serwis z kontrolą rodzica, request i response, mapper, kontroler pod `/api/vehicles/{vehicleId}/documents`;
+  - `config/ClockConfig.java`: bean `Clock` (Europe/Warsaw) i `ValidationConfigurationCustomizer`, czyli decyzja R8 (opcja 1).
+- **Testy backendu:**
+  - kontroler (14), serwis (7), repozytorium (3);
+  - `VehicleDeleteWithVehicleDocumentsIntegrationTest`: usunięcie pojazdu z dokumentami daje 409, a nie 500. Test przeszedł bez `flush()` w `VehicleService`, więc serwis pojazdów został bez zmian (Z13).
+- **Frontend:**
+  - `vehicle-documents/`: lista, detal, formularz tylko do tworzenia, trasy `''` / `new` / `:id`, spec formularza (7 testów);
+  - trasa zagnieżdżona przed `vehicles` w `app.routes.ts`;
+  - link w istniejącej sekcji „Documents” w `vehicle-detail.html`.
+- **Wynik testów:** `./test.sh` zielony, backend 82, frontend 25. Seedowane pojazdy 1–3 bez zmian.
+
+### Błąd wyłapany w pętli walidacji: test zegara niczego nie dowodził
+- **Problem:** pierwsza runda była zielona, ale stały „dziś” w teście kontrolera był ustawiony na prawdziwą dzisiejszą datę (2026-11-18). Test „jutro daje 400” przeszedłby także z zegarem systemowym, więc nie sprawdzał, czy `ClockProvider` jest w ogóle podpięty.
+- **Jak wyłapane:** przegląd asercji po zielonym wyniku, z pytaniem „czy ten test padnie, jeśli usunę konfigurację?”.
+- **Poprawka:**
+  - Stały zegar przeniesiony w przeszłość (2025-06-15).
+  - Teraz 400 dla 2025-06-16 pojawia się tylko wtedy, gdy walidator używa zegara aplikacji, bo dla zegara systemowego ta data jest przeszłością.
+  - Po zmianie testy dalej są zielone, czyli `ClockProvider` działa naprawdę.
+- **Wniosek:** zielony test nie znaczy, że test coś sprawdza. Zasada trafiła do `tests.md`.
+
+### Luki w skillu ujawnione przez tę encję (poprawione w tekście skilla, commit `5bd46cf`, bez regeneracji)
+1. **Pola tylko do odczytu.**
+   - Problem: skill nie opisywał pola ustawianego przez system (`status`).
+   - Rozwiązanie użyte przy generowaniu: pola nie ma w request ani w formularzu, konstruktor encji ustawia `PENDING`, jest getter bez settera, pole jest w response i w UI.
+   - Teraz to reguła w `SKILL.md` krok 3.
+2. **Nazwa wyświetlana encji z kilku słów.**
+   - Problem: szablony komunikatów używały surowej nazwy klasy (`VehicleDocument with id ...`).
+   - Teraz: `SKILL.md` krok 2 definiuje nazwę wyświetlaną (klasa rozbita na słowa, albo liczba pojedyncza segmentu URL). Komunikaty i teksty UI jej używają: `Document with id 5 not found`.
+3. **Folder kontra segment URL w nested.**
+   - Problem: szkielet frontendu używał `<folder>` także jako ścieżki trasy i URL-a. Tu folder to `vehicle-documents`, a segment `documents`.
+   - Teraz: osobny placeholder `<segment>` dla URL-i, tras i linków. `<folder>` zostaje tylko dla ścieżek plików.
+4. **Akronimy w etykietach enumów.**
+   - Problem: reguła „sentence case” dawała `Coc` i `Oc policy`.
+   - Teraz: akronimy zostają wielkimi literami (`COC`, `OC policy`, `Registration POA`).
+5. **Stała data w teście zegara.**
+   - Problem: `tests.md` nie mówił, że ma być w przeszłości (patrz błąd wyżej).
+   - Teraz to wymóg z uzasadnieniem.
+
+### Co zostaje do zrobienia ręcznie (poza wzorcem)
+Tej części skill z założenia nie generuje.
+- 409 przy dodaniu dokumentu typu, który ma już aktywny (nieodrzucony) dokument. Sprawdzenie tylko w serwisie, zgodnie z Z8.
+- `PUT /api/vehicles/{vehicleId}/documents/{documentId}/status`:
+  - dozwolone tylko `PENDING → VERIFIED` i `PENDING → REJECTED`, każda inna zmiana daje 409 (R6, Z3);
+  - reguła przejść jako czysty kod z testami jednostkowymi.
+- `GET /api/vehicles/{vehicleId}/handover-readiness` (R10–R17):
+  - wymagane typy i `REGISTRATION_POA` zależny od flagi `registeredByDealer` na pojeździe;
+  - `NOT_VERIFIED`, `EXPIRED` (względem daty wydania albo dziś, Z4) i `NO_HANDOVER_DATE`;
+  - deterministyczna kolejność (Z7);
+  - logika jako czysty kod z `Clock`.
+- Zmiana w module pojazdów: `registeredByDealer` według `INTENT.md` §7, ze starymi konstruktorami.
+- UI: akcje Verify/Reject dla `PENDING` i blok gotowości do wydania w szczegółach pojazdu (R18).
