@@ -195,6 +195,6 @@ Mistakes an agent makes in this repo without this skill. Update this list after 
 - **Nested route order:** the route in `app.routes.ts` is registered after the parent's lazy route, so the parent's `:id` swallows it.
 - **Nested integration test marked `@Transactional`:** the delete is never flushed, so the FK error never happens and the test passes falsely.
 - **Form spec without `afterEach(() => http.verify())`,** or without `http.expectNone` on an empty submit.
-- **Single backslash in `@Pattern`:** `regexp` is a Java string literal, so every regex backslash is doubled (`"\+?[0-9]+"`, `"\d{10}"`). A single `\+` does not compile.
-- **Pattern made only of optional characters:** `[0-9 -]+` also accepts `"---"` or `"   "`. A pattern must start and end with a required character class, e.g. `\+?[0-9]([0-9 -]*[0-9])?`; put any length limit in a lookahead (`(?=.{9,20}$)`).
+- **Single backslash in `@Pattern`:** `regexp` is a Java string literal, so every regex backslash is doubled in the source: write `"\\+?[0-9]+"` and `"\\d{10}"`. A single `\+` does not compile.
+- **Pattern made only of optional characters:** `[0-9 -]+` also accepts `"---"` or `"   "`. A pattern must start and end with a required character class, e.g. `"\\+?[0-9]([0-9 -]*[0-9])?"` in Java source; put any length limit in a lookahead (`(?=.{9,20}$)`).
 - **`@Pattern` / `@Email` field without a format test:** every such field needs a controller test with an invalid value and its exact message (see [tests.md](tests.md)).
