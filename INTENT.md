@@ -126,7 +126,7 @@
 | Z7 | Kolejność: `missingDocumentTypes` i problemy według kolejności typów w enumie, w obrębie typu `NOT_VERIFIED` przed `EXPIRED`, `NO_HANDOVER_DATE` na końcu. Lista dokumentów jest sortowana po `id`. | Deterministyczne odpowiedzi; przykład [K] ma `NO_HANDOVER_DATE` na końcu; moduł pojazdów sortuje po `id`. |
 | Z8 | Unikalność aktywnego dokumentu sprawdza **tylko serwis**: `exists…StatusNot(REJECTED)` w `@Transactional`, 409 z czytelnym `detail`. Bez constraintu w bazie. | Decyzja: opcja A. H2 nie ma indeksów częściowych. Ryzyko wyścigu i opcja B (kolumna wyliczana + UNIQUE) jako następny krok są opisane w `DECISIONS.md`. |
 | Z9 | E-mail jest zapisywany i zwracany dokładnie tak, jak przyszedł. Unikalność jest dokładna (`existsByEmail` / `existsByEmailAndIdNot` + constraint `uq_customer_email`), jak VIN w pojazdach. | Klienci mają powstać wyłącznie skillem, więc bez logiki spoza wzorca. Wielkość liter zostaje jako pytanie P6. |
-| Z10 | NIP: opcjonalny, dokładnie 10 cyfr, **bez myślników i spacji** (`\d{10}`), bez sumy kontrolnej. Telefon: wymagany, prosty wzorzec (cyfry, spacje, opcjonalny `+`, 9–20 znaków). | Minimalna walidacja wyłapująca literówki, bez wymyślania reguł (P7). |
+| Z10 | NIP: opcjonalny, dokładnie 10 cyfr, **bez myślników i spacji** (`\d{10}`), bez sumy kontrolnej. Telefon: wymagany, prosty wzorzec: cyfry, spacje i myślniki, opcjonalny `+` tylko na początku, 9–20 znaków. | Minimalna walidacja wyłapująca literówki, bez wymyślania reguł (P7). |
 | Z11 | „Dziś” pochodzi z wstrzykiwanego `Clock` (strefa `Europe/Warsaw`). | Testowalność reguł dat i brak zależności od strefy serwera. |
 | Z12 | `number` dokumentu: wymagany, max 50 znaków, bez unikalności. | Kontrakt nie podaje reguł; różni wystawcy mogą mieć te same numery. |
 | Z13 | Usunięcie pojazdu z dokumentami zwraca 409 (FK, istniejący handler `DataIntegrityViolation`). | Anna dba o historię „przy kontroli”, a kaskadowe usunięcie by ją niszczyło (P8). |
@@ -171,32 +171,10 @@
 2. **Seed pojazdów zostaje w stanie startowym.**
    - Nie zmieniamy istniejących wierszy z `V2`/`V3` i nie dodajemy do pojazdów 1–3 żadnych dokumentów.
    - Pojazd 3 (Skoda, `TMBJJ7NE8L0000003`) zostaje bez daty wydania, więc od razu pokazuje `NO_HANDOVER_DATE`, a pojazdy 1–2 pokazują komplet braków.
-   - Testy oceniających mogą zakładać ten stan, więc migracje dokumentów zawierają tylko DDL.
+   - Migracje dokumentów zawierają tylko DDL, bez danych.
 3. **Seed klientów** używa domeny zarezerwowanej do testów, która nie koliduje z prawdziwymi danymi: `@example.test` (np. `jan.kowalski@example.test`). Telefony i NIP-y są oczywiście fikcyjne.
 4. **Nowe migracje** idą od `V4` w kolejności powstawania (klienci przed dokumentami, zgodnie z kolejnością z briefu). Istniejących plików migracji nie edytujemy, bo Flyway sprawdza sumy kontrolne.
 
-## 9. R8 deterministycznie: propozycja
+## 9. R8 deterministycznie: decyzja
 
-**Problem:** `@PastOrPresent` porównuje z `ClockProvider` walidatora, który domyślnie zwraca zegar systemowy, a nie nasz `Clock` (Z11). Testy „dzisiaj/jutro” zależałyby od chwili uruchomienia, a strefa serwera mogłaby przesunąć granicę dnia.
-
-**Opcja 1 (rekomendowana): `ClockProvider` dla walidatora.**
-- Jedna klasa konfiguracji, np. `B/config/ClockConfig.java`:
-  - `@Bean Clock clock()` zwraca `Clock.system(ZoneId.of("Europe/Warsaw"))`.
-  - `@Bean ValidationConfigurationCustomizer` ustawia `configuration -> configuration.clockProvider(() -> clock)`. To hook Spring Boot (jest w 3.5.16), więc nie trzeba podmieniać `LocalValidatorFactoryBean`.
-- Na `DocumentRequest.issueDate`: `@NotNull @PastOrPresent`.
-- Błąd przechodzi zwykłą ścieżką `MethodArgumentNotValidException`, więc odpowiedź ma ten sam format: `{"detail":"Validation failed","errors":[{"field":"issueDate","message":"must be a date in the past or in the present"}]}`. Komunikat jest angielski dzięki `spring.web.locale=en`.
-- Serwis i readiness używają tego samego beana `Clock`, więc „dzisiaj” jest jedno w całej aplikacji.
-- Testy:
-  - `@WebMvcTest` nie skanuje klas `@Configuration`. Test kontrolera dostaje `@Import(TestClockConfig)` ze stałym `Clock.fixed(...)` i customizerem, więc „jutro” jest deterministyczne.
-  - Test serwisu przekazuje `Clock.fixed` w konstruktorze.
-  - Jeden test sprawdza, że customizer jest naprawdę podpięty: 400 dla daty = fixed + 1 dzień, 201 dla fixed.
-
-**Opcja 2: sprawdzenie w serwisie.**
-- Serwis porównuje `issueDate` z `LocalDate.now(clock)` i rzuca nowy wyjątek (np. `FieldValidationException(field, message)`), a `GlobalExceptionHandler` dostaje handler mapujący go na ten sam format 400 z `errors[{field:"issueDate"}]`.
-- Minusy:
-  - Zmiana we współdzielonym `error/`.
-  - Reguła jest poza adnotacjami DTO, inaczej niż we wzorcu.
-  - Błąd daty pojawia się dopiero po przejściu innych walidacji, więc klient nie dostanie wszystkich błędów naraz.
-  - Test kontrolera z mockowanym serwisem nie sprawdza reguły (wzorzec robi `verifyNoInteractions(service)` przy 400).
-
-Opcja 1 zostawia regułę tam, gdzie reszta walidacji (w DTO), i nie rusza formatu błędów. Ten sam mechanizm obsłuży ewentualne kolejne reguły dat na adnotacjach.
+`issueDate` sprawdza `@PastOrPresent`, a walidator dostaje nasz `Clock` przez `ClockProvider` (`ValidationConfigurationCustomizer`), więc błąd ma standardowy format 400 `errors[{field:"issueDate"}]`, a testy używają `Clock.fixed`. Porównanie z alternatywą (sprawdzenie w serwisie) jest w `DECISIONS.md`.
