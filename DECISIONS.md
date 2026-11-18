@@ -281,4 +281,4 @@ Do tego helper w nowym teście checkboxa: samo zdarzenie `change` nie aktualizuj
 
 **Wniosek:** reguły, które się nawzajem ograniczają (tu: przejścia statusu i jeden aktywny dokument typu), trzeba sprawdzić na scenariuszu przepływu, a nie tylko każdą osobno.
 
-**Otwarte w UI:** przycisk Reject jest na liście dokumentów tylko przy `PENDING`. API pozwala już odrzucić zweryfikowany dokument, ale w UI nie ma do tego przycisku.
+**UI:** lista dokumentów pokazuje Verify tylko przy `PENDING`, a Reject przy `PENDING` i `VERIFIED`. Odrzucony dokument nie ma akcji. Odnowienie polisy da się więc zrobić z UI. Dwa istniejące testy spec listy zmieniły oczekiwania zgodnie z nowym wymaganiem, do tego doszedł test odrzucenia zweryfikowanego dokumentu.

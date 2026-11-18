@@ -39,6 +39,8 @@
           <td>
             @if (document.status === 'PENDING') {
               <button type="button" (click)="changeStatus(document, 'VERIFIED')">Verify</button>
+            }
+            @if (document.status !== 'REJECTED') {
               <button type="button" (click)="changeStatus(document, 'REJECTED')">Reject</button>
             }
           </td>

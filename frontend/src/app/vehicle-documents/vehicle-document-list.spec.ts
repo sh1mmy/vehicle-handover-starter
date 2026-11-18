@@ -19,6 +19,7 @@ describe('VehicleDocumentList', () => {
     status: 'PENDING',
   };
   const verified = { ...pending, id: 6, type: 'COC', number: 'COC/1', status: 'VERIFIED' };
+  const rejected = { ...pending, id: 7, type: 'OC_POLICY', number: 'OC/1', status: 'REJECTED' };
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
@@ -29,7 +30,9 @@ describe('VehicleDocumentList', () => {
     http = TestBed.inject(HttpTestingController);
     fixture.componentRef.setInput('vehicleId', '1');
     fixture.detectChanges();
-    http.expectOne({ method: 'GET', url: '/api/vehicles/1/documents' }).flush([pending, verified]);
+    http
+      .expectOne({ method: 'GET', url: '/api/vehicles/1/documents' })
+      .flush([pending, verified, rejected]);
     await fixture.whenStable();
   });
 
@@ -51,9 +54,10 @@ describe('VehicleDocumentList', () => {
     return Array.from(element.querySelectorAll('.error'), (error) => error.textContent!.trim());
   }
 
-  it('offers Verify and Reject only for pending documents', () => {
+  it('offers Verify for pending documents and Reject for pending and verified ones', () => {
     expect(rowButtons(0)).toEqual(['Verify', 'Reject']);
-    expect(rowButtons(1)).toEqual([]);
+    expect(rowButtons(1)).toEqual(['Reject']);
+    expect(rowButtons(2)).toEqual([]);
   });
 
   it('verifies a pending document and reloads the list', async () => {
@@ -69,7 +73,23 @@ describe('VehicleDocumentList', () => {
         .flush([{ ...pending, status: 'VERIFIED' }, verified]),
     );
     await fixture.whenStable();
-    expect(rowButtons(0)).toEqual([]);
+    expect(rowButtons(0)).toEqual(['Reject']);
+  });
+
+  it('rejects a verified document so it can be replaced', async () => {
+    click(1, 'Reject');
+
+    const request = http.expectOne({ method: 'PUT', url: '/api/vehicles/1/documents/6/status' });
+    expect(request.request.body).toEqual({ status: 'REJECTED' });
+    request.flush({ ...verified, status: 'REJECTED' });
+
+    await vi.waitFor(() =>
+      http
+        .expectOne({ method: 'GET', url: '/api/vehicles/1/documents' })
+        .flush([pending, { ...verified, status: 'REJECTED' }]),
+    );
+    await fixture.whenStable();
+    expect(rowButtons(1)).toEqual([]);
   });
 
   it('rejects a pending document', async () => {
