@@ -159,7 +159,7 @@
    - `vehicle-api.ts`: pole `registeredByDealer: boolean` w `Vehicle`.
    - Formularz: checkbox „Dealer registers the vehicle”, domyślnie odznaczony.
    - Detal: kolumna lub wiersz w `dl`.
-   - Pusta sekcja „Documents” w `vehicle-detail.html` dostaje listę dokumentów, formularz dodania, akcje Verify/Reject dla `PENDING` i blok gotowości do wydania (R18).
+   - Sekcja „Documents” w `vehicle-detail.html` dostaje link do osobnej strony dokumentów (`/vehicles/:vehicleId/documents`: lista z akcjami Verify/Reject dla `PENDING`, formularz dodania, szczegóły dokumentu) oraz blok gotowości do wydania (R18).
 8. **Testy**: w `VehicleControllerTest`, `VehicleServiceTest` i spec formularza dochodzą przypadki „brak pola → false” oraz „true jest zapisywane i zwracane”. Istniejące testy zostają bez zmian, co samo w sobie sprawdza zgodność wsteczną.
 9. **Zmiana daty wydania** na pojeździe od razu wpływa na gotowość, bez dodatkowej logiki (Z2).
 

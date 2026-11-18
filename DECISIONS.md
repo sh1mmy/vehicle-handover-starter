@@ -201,3 +201,52 @@ Do tego helper w nowym teście checkboxa: samo zdarzenie `change` nie aktualizuj
 ### Uczciwie o test-first
 - W punktach 1 (przejścia statusu), 4 (gotowość), 5 (blok gotowości) i przy checkboxie oraz Verify/Reject testy były uruchomione i czerwone przed implementacją (brak klas albo nieprzechodzące asercje).
 - W punkcie 2 (409 przy aktywnym typie, `expiryDate` < `issueDate`) testy zostały napisane przed implementacją, ale **nie były najpierw uruchomione na czerwono**. Pierwszy raz uruchomiłem je razem z gotowym kodem. Nie ma więc dowodu, że każdy z nich padał bez implementacji, choć asercje sprawdzają konkretne komunikaty i pola.
+
+## Niezależna recenzja całego diffu
+
+**Jak:**
+- Osobny subagent tylko do odczytu przejrzał `git diff upstream/main..HEAD` (24 commity, 86 plików) względem BRIEF.md (zwłaszcza kontraktu API), INTENT.md, CLAUDE.md i oryginalnego modułu pojazdów.
+- Dostał źródła do porównania, a nie wnioski autora, żeby jego ocena nie była zakotwiczona w moich.
+- Każde ustalenie zostało sprawdzone w kodzie przed decyzją.
+- Decyzje, co poprawiamy, podjął właściciel.
+
+**Wynik:**
+- Brak błędów P1, czyli niezgodności z kontraktem i błędów poprawności.
+- Sprawdzone bez zastrzeżeń:
+  - ścieżki, wartości enumów, kształt odpowiedzi gotowości, kody 400/404/409;
+  - użycie `Clock`;
+  - migracje V4–V7;
+  - zgodność wsteczna API pojazdów;
+  - brak nowych zależności.
+
+### Poprawione (commity `003d8f8`, `b46d8e8`, `a59180c` i ten)
+| Ustalenie | Poprawka |
+|---|---|
+| P2.1: reguły NIP z INTENT §2 bez testów (tylko `"123"`) | Test parametryzowany: 9 i 11 cyfr, z myślnikami, ze spacjami, pusty string, każdy daje 400 na polu `nip`. Do tego brak pola i `null` dają 201, a request ma `nip == null` |
+| P2.2: brak testu serwisu „update z własnym e-mailem” | `CustomerServiceTest.updateKeepsOwnEmail` |
+| P2.3: R4 „`status` w body POST jest ignorowany” bez dowodu na poziomie API | Test integracyjny: POST z `"status": "VERIFIED"` daje 201, a w odpowiedzi i w bazie jest `PENDING` |
+| P3.1: 409 dla dokumentów tylko na mockach | `VehicleDocumentRulesIntegrationTest` na prawdziwej bazie: drugi aktywny dokument typu daje 409, `REJECTED → VERIFIED` daje 409, nowy dokument po odrzuconym daje 201 |
+| P3.4: INTENT §7.7 opisywał dokumenty wewnątrz szczegółów pojazdu | Opis poprawiony zgodnie z kodem: osobna strona dokumentów, a w szczegółach link i blok gotowości |
+| Uwaga właściciela: `HandoverReadinessController` miał pełną ścieżkę w `@GetMapping` | `@RequestMapping("/api/vehicles/{vehicleId}")` na klasie, `@GetMapping("/handover-readiness")`, jak w `VehicleController`. Testy bez zmian i dalej zielone |
+
+**Wnioski dla skilla:**
+- P2.1 i P2.2 to luki w testach kodu klientów wygenerowanego skillem.
+- `tests.md` wymaga teraz:
+  - testów granic i pustego stringa dla każdego pola z `@Pattern` (`@ParameterizedTest`);
+  - pary testów brak/`null` dla każdego pola opcjonalnego;
+  - testu serwisu `updateKeepsOwn<Unique>`.
+- Bez regeneracji. Testy klientów dopisano ręcznie, a następna encja dostanie je ze skilla.
+
+### Świadomie zostawione
+- **P3.2: komunikat 409 przy duplikacie aktywnego typu:** „Vehicle with id X already has an active document of type INVOICE”.
+  - Odbiega od szablonu `"<Entity> with <field> <value> already exists"` z CLAUDE.md, bo ten szablon opisuje unikalność pola encji, a tu konflikt dotyczy pary pojazd + typ i statusu.
+  - Kontrakt nie określa treści `detail`.
+  - Komunikat jest sprawdzany dokładnie w testach kontrolera, serwisu i integracyjnym.
+- **P3.5: wyścig dwóch równoległych POST-ów tego samego typu (Z8):** decyzja z analizy, opisana wyżej razem z opcją B (kolumna wyliczana + UNIQUE) jako następnym krokiem. Do omówienia na rozmowie.
+- **P3.6: `ProductionYearValidator` używa `Year.now()` bez `Clock`:**
+  - To kod startowy spoza naszego diffu, więc go nie zmieniamy.
+  - Dług techniczny: walidator roku produkcji zależy od zegara systemowego, a nie od `Clock` aplikacji.
+  - Naprawa byłaby prosta (`ClockProvider` jest już podpięty: `Year.now(clock)` w walidatorze), ale zmienia moduł wzorcowy.
+- **P3.3: `GET .../documents/{id}` i ekran szczegółów dokumentu** wykraczają poza kontrakt.
+  - Są zgodne z konwencją modułu pojazdów i potrzebne dla nagłówka `Location` po POST.
+  - Zostają.
