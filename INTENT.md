@@ -88,7 +88,8 @@
 | R22 | `Jan@X.pl` i `jan@x.pl` | Dwa różne e-maile, 201 (porównanie dokładne, Z9). Pytanie P6. |
 | R22 | E-mail `Jan@X.pl` | Zapisywany i zwracany dokładnie jako `Jan@X.pl` |
 | R22 | Update klienta z jego własnym e-mailem | 200 (`existsByEmailAndIdNot`) |
-| R21 NIP | Brak NIP-u albo pusty string | 201, NIP zapisany jako `null` |
+| R21 NIP | Brak pola `nip` albo `null` | 201, NIP zapisany jako `null` |
+| R21 | `"nip": ""` (pusty string przez API) | 400, nie pasuje do `\d{10}`. Formularz wysyła `null` dla pustego pola, więc z UI ten przypadek nie wystąpi. |
 | R21 | NIP ma 9 lub 11 cyfr | 400 (Z10) |
 | R21 | NIP `123-456-78-90` albo `123 456 78 90` | 400, z myślnikami ani spacjami nie przechodzi (Z10) |
 
