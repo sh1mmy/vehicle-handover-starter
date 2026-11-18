@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -18,6 +19,7 @@ import java.time.ZoneId;
 import java.util.List;
 
 import com.example.dealership.config.ClockConfig;
+import com.example.dealership.error.ConflictException;
 import com.example.dealership.error.NotFoundException;
 
 import org.junit.jupiter.api.Test;
@@ -240,6 +242,75 @@ class VehicleDocumentControllerTest {
         verifyNoInteractions(documentService);
     }
 
+    @Test
+    void changeStatusReturnsUpdatedVehicleDocument() throws Exception {
+        when(documentService.changeStatus(eq(1L), eq(1L), any(VehicleDocumentStatusRequest.class)))
+                .thenReturn(response(VehicleDocumentStatus.VERIFIED));
+
+        mockMvc.perform(put("/api/vehicles/1/documents/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"VERIFIED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.status").value("VERIFIED"));
+    }
+
+    @Test
+    void changeStatusReturnsBadRequestProblemWhenStatusIsMissing() throws Exception {
+        mockMvc.perform(put("/api/vehicles/1/documents/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": null}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("Validation failed"))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("status"))
+                .andExpect(jsonPath("$.errors[0].message").value("must not be null"));
+
+        verifyNoInteractions(documentService);
+    }
+
+    @Test
+    void changeStatusReturnsBadRequestProblemWhenStatusIsUnknown() throws Exception {
+        mockMvc.perform(put("/api/vehicles/1/documents/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"APPROVED\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("status"))
+                .andExpect(jsonPath("$.errors[0].message").value("must be one of: PENDING, VERIFIED, REJECTED"));
+
+        verifyNoInteractions(documentService);
+    }
+
+    @Test
+    void changeStatusReturnsNotFoundProblemWhenVehicleDocumentBelongsToAnotherVehicle() throws Exception {
+        when(documentService.changeStatus(eq(2L), eq(1L), any(VehicleDocumentStatusRequest.class)))
+                .thenThrow(new NotFoundException("Document with id 1 not found"));
+
+        mockMvc.perform(put("/api/vehicles/2/documents/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"VERIFIED\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("Document with id 1 not found"));
+    }
+
+    @Test
+    void changeStatusReturnsConflictProblemWhenTransitionIsNotAllowed() throws Exception {
+        when(documentService.changeStatus(eq(1L), eq(1L), any(VehicleDocumentStatusRequest.class)))
+                .thenThrow(new ConflictException("Document with id 1 cannot change status from REJECTED to VERIFIED"));
+
+        mockMvc.perform(put("/api/vehicles/1/documents/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"VERIFIED\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.detail").value("Document with id 1 cannot change status from REJECTED to VERIFIED"));
+    }
+
     private static String invalidBody() {
         return """
                 {
@@ -250,7 +321,11 @@ class VehicleDocumentControllerTest {
     }
 
     private static VehicleDocumentResponse response() {
+        return response(VehicleDocumentStatus.PENDING);
+    }
+
+    private static VehicleDocumentResponse response(VehicleDocumentStatus status) {
         return new VehicleDocumentResponse(1L, 1L, VehicleDocumentType.OC_POLICY, "OC/2026/0001", TODAY,
-                LocalDate.of(2026, 6, 14), VehicleDocumentStatus.PENDING);
+                LocalDate.of(2026, 6, 14), status);
     }
 }

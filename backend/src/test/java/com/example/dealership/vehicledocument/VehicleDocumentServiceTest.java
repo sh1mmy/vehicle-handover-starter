@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import com.example.dealership.error.ConflictException;
 import com.example.dealership.error.NotFoundException;
 import com.example.dealership.vehicle.VehicleRepository;
 
@@ -107,6 +108,58 @@ class VehicleDocumentServiceTest {
         assertThatThrownBy(() -> documentService.create(99L, request(NUMBER)))
                 .isInstanceOf(NotFoundException.class)
                 .hasMessage("Vehicle with id 99 not found");
+        verify(documentRepository, never()).save(any());
+    }
+
+    @Test
+    void changeStatusVerifiesPendingDocument() {
+        VehicleDocument document = document(NUMBER);
+        when(vehicleRepository.existsById(1L)).thenReturn(true);
+        when(documentRepository.findByIdAndVehicleId(5L, 1L)).thenReturn(Optional.of(document));
+        when(documentRepository.save(document)).thenReturn(document);
+
+        VehicleDocumentResponse response = documentService.changeStatus(1L, 5L,
+                new VehicleDocumentStatusRequest(VehicleDocumentStatus.VERIFIED));
+
+        assertThat(response.status()).isEqualTo(VehicleDocumentStatus.VERIFIED);
+        assertThat(document.getStatus()).isEqualTo(VehicleDocumentStatus.VERIFIED);
+        verify(documentRepository).save(document);
+    }
+
+    @Test
+    void changeStatusThrowsConflictWhenTransitionIsNotAllowed() {
+        VehicleDocument document = document(NUMBER);
+        document.changeStatus(VehicleDocumentStatus.REJECTED);
+        when(vehicleRepository.existsById(1L)).thenReturn(true);
+        when(documentRepository.findByIdAndVehicleId(5L, 1L)).thenReturn(Optional.of(document));
+
+        assertThatThrownBy(() -> documentService.changeStatus(1L, 5L,
+                new VehicleDocumentStatusRequest(VehicleDocumentStatus.VERIFIED)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("Document with id 5 cannot change status from REJECTED to VERIFIED");
+        assertThat(document.getStatus()).isEqualTo(VehicleDocumentStatus.REJECTED);
+        verify(documentRepository, never()).save(any());
+    }
+
+    @Test
+    void changeStatusThrowsNotFoundWhenVehicleDoesNotExist() {
+        when(vehicleRepository.existsById(99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> documentService.changeStatus(99L, 5L,
+                new VehicleDocumentStatusRequest(VehicleDocumentStatus.VERIFIED)))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Vehicle with id 99 not found");
+    }
+
+    @Test
+    void changeStatusThrowsNotFoundWhenVehicleDocumentBelongsToAnotherVehicle() {
+        when(vehicleRepository.existsById(1L)).thenReturn(true);
+        when(documentRepository.findByIdAndVehicleId(5L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> documentService.changeStatus(1L, 5L,
+                new VehicleDocumentStatusRequest(VehicleDocumentStatus.VERIFIED)))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Document with id 5 not found");
         verify(documentRepository, never()).save(any());
     }
 

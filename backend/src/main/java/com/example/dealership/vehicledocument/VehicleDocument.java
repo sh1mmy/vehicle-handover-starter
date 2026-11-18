@@ -78,4 +78,9 @@ public class VehicleDocument {
     public VehicleDocumentStatus getStatus() {
         return status;
     }
+
+    /** Sets the status; callers check {@link VehicleDocumentStatusTransitions} first. */
+    public void changeStatus(VehicleDocumentStatus status) {
+        this.status = status;
+    }
 }

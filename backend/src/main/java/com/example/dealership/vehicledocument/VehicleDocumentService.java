@@ -2,6 +2,7 @@ package com.example.dealership.vehicledocument;
 
 import java.util.List;
 
+import com.example.dealership.error.ConflictException;
 import com.example.dealership.error.NotFoundException;
 import com.example.dealership.vehicle.VehicleRepository;
 
@@ -38,6 +39,18 @@ public class VehicleDocumentService {
         requireVehicle(vehicleId);
         VehicleDocument document = documentRepository.save(VehicleDocumentMapper.toEntity(vehicleId, request));
         return VehicleDocumentMapper.toResponse(document);
+    }
+
+    @Transactional
+    public VehicleDocumentResponse changeStatus(Long vehicleId, Long id, VehicleDocumentStatusRequest request) {
+        requireVehicle(vehicleId);
+        VehicleDocument document = getDocument(vehicleId, id);
+        if (!VehicleDocumentStatusTransitions.isAllowed(document.getStatus(), request.status())) {
+            throw new ConflictException("Document with id " + id + " cannot change status from "
+                    + document.getStatus() + " to " + request.status());
+        }
+        document.changeStatus(request.status());
+        return VehicleDocumentMapper.toResponse(documentRepository.save(document));
     }
 
     private void requireVehicle(Long vehicleId) {
