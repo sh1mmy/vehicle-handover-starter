@@ -243,6 +243,42 @@ class VehicleDocumentControllerTest {
     }
 
     @Test
+    void createReturnsConflictProblemWhenActiveDocumentOfTypeExists() throws Exception {
+        when(documentService.create(eq(1L), any(VehicleDocumentRequest.class)))
+                .thenThrow(new ConflictException("Vehicle with id 1 already has an active document of type OC_POLICY"));
+
+        mockMvc.perform(post("/api/vehicles/1/documents").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.detail").value("Vehicle with id 1 already has an active document of type OC_POLICY"));
+    }
+
+    @Test
+    void createReturnsBadRequestProblemWithFieldErrorWhenExpiryDateIsBeforeIssueDate() throws Exception {
+        String body = VALID_BODY.replace("\"expiryDate\": \"2026-06-14\"", "\"expiryDate\": \"2025-06-14\"");
+
+        mockMvc.perform(post("/api/vehicles/1/documents").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("Validation failed"))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("expiryDate"))
+                .andExpect(jsonPath("$.errors[0].message").value("must not be before issue date"));
+
+        verifyNoInteractions(documentService);
+    }
+
+    @Test
+    void createAcceptsExpiryDateEqualToIssueDate() throws Exception {
+        when(documentService.create(eq(1L), any(VehicleDocumentRequest.class))).thenReturn(response());
+        String body = VALID_BODY.replace("\"expiryDate\": \"2026-06-14\"", "\"expiryDate\": \"2025-06-15\"");
+
+        mockMvc.perform(post("/api/vehicles/1/documents").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void changeStatusReturnsUpdatedVehicleDocument() throws Exception {
         when(documentService.changeStatus(eq(1L), eq(1L), any(VehicleDocumentStatusRequest.class)))
                 .thenReturn(response(VehicleDocumentStatus.VERIFIED));

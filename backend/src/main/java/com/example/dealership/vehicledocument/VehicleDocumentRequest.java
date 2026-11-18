@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Size;
 
+@ExpiryDateNotBeforeIssueDate
 public record VehicleDocumentRequest(
         @NotNull
         VehicleDocumentType type,

@@ -11,4 +11,7 @@ public interface VehicleDocumentRepository extends JpaRepository<VehicleDocument
     List<VehicleDocument> findAllByVehicleId(Long vehicleId, Sort sort);
 
     Optional<VehicleDocument> findByIdAndVehicleId(Long id, Long vehicleId);
+
+    boolean existsByVehicleIdAndTypeAndStatusNot(Long vehicleId, VehicleDocumentType type,
+            VehicleDocumentStatus status);
 }

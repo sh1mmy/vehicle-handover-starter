@@ -37,6 +37,12 @@ public class VehicleDocumentService {
     @Transactional
     public VehicleDocumentResponse create(Long vehicleId, VehicleDocumentRequest request) {
         requireVehicle(vehicleId);
+        // Checked only here, in the transaction (INTENT.md Z8): H2 has no partial unique index.
+        if (documentRepository.existsByVehicleIdAndTypeAndStatusNot(vehicleId, request.type(),
+                VehicleDocumentStatus.REJECTED)) {
+            throw new ConflictException("Vehicle with id " + vehicleId + " already has an active document of type "
+                    + request.type());
+        }
         VehicleDocument document = documentRepository.save(VehicleDocumentMapper.toEntity(vehicleId, request));
         return VehicleDocumentMapper.toResponse(document);
     }

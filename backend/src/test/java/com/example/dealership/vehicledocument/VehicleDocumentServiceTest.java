@@ -102,6 +102,31 @@ class VehicleDocumentServiceTest {
     }
 
     @Test
+    void createThrowsConflictWhenActiveDocumentOfTypeExists() {
+        when(vehicleRepository.existsById(1L)).thenReturn(true);
+        when(documentRepository.existsByVehicleIdAndTypeAndStatusNot(1L, VehicleDocumentType.OC_POLICY,
+                VehicleDocumentStatus.REJECTED)).thenReturn(true);
+
+        assertThatThrownBy(() -> documentService.create(1L, request(NUMBER)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("Vehicle with id 1 already has an active document of type OC_POLICY");
+        verify(documentRepository, never()).save(any());
+    }
+
+    @Test
+    void createSavesDocumentWhenOnlyRejectedDocumentsOfTypeExist() {
+        when(vehicleRepository.existsById(1L)).thenReturn(true);
+        when(documentRepository.existsByVehicleIdAndTypeAndStatusNot(1L, VehicleDocumentType.OC_POLICY,
+                VehicleDocumentStatus.REJECTED)).thenReturn(false);
+        when(documentRepository.save(any(VehicleDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        VehicleDocumentResponse response = documentService.create(1L, request(NUMBER));
+
+        assertThat(response.status()).isEqualTo(VehicleDocumentStatus.PENDING);
+        verify(documentRepository).save(any(VehicleDocument.class));
+    }
+
+    @Test
     void createThrowsNotFoundWhenVehicleDoesNotExist() {
         when(vehicleRepository.existsById(99L)).thenReturn(false);
 

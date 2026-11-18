@@ -55,6 +55,31 @@ class VehicleDocumentRepositoryTest {
     }
 
     @Test
+    void existsByVehicleIdAndTypeAndStatusNotFindsOnlyActiveDocumentsOfVehicle() {
+        Long vehicleId = vehicle(VIN);
+        Long otherVehicleId = vehicle(OTHER_VIN);
+        VehicleDocument rejected = document(vehicleId, VehicleDocumentType.INVOICE, "FV/1");
+        rejected.changeStatus(VehicleDocumentStatus.REJECTED);
+        documentRepository.save(rejected);
+        VehicleDocument verified = document(vehicleId, VehicleDocumentType.COC, "COC/1");
+        verified.changeStatus(VehicleDocumentStatus.VERIFIED);
+        documentRepository.save(verified);
+        documentRepository.save(document(vehicleId, VehicleDocumentType.OC_POLICY, "OC/1"));
+        documentRepository.save(document(otherVehicleId, VehicleDocumentType.SALES_AGREEMENT, "UM/1"));
+        entityManager.flush();
+
+        VehicleDocumentStatus rejectedStatus = VehicleDocumentStatus.REJECTED;
+        assertThat(documentRepository.existsByVehicleIdAndTypeAndStatusNot(
+                vehicleId, VehicleDocumentType.INVOICE, rejectedStatus)).isFalse();
+        assertThat(documentRepository.existsByVehicleIdAndTypeAndStatusNot(
+                vehicleId, VehicleDocumentType.COC, rejectedStatus)).isTrue();
+        assertThat(documentRepository.existsByVehicleIdAndTypeAndStatusNot(
+                vehicleId, VehicleDocumentType.OC_POLICY, rejectedStatus)).isTrue();
+        assertThat(documentRepository.existsByVehicleIdAndTypeAndStatusNot(
+                vehicleId, VehicleDocumentType.SALES_AGREEMENT, rejectedStatus)).isFalse();
+    }
+
+    @Test
     void saveStoresVehicleDocumentThatCanBeReadBack() {
         Long vehicleId = vehicle(VIN);
         VehicleDocument saved = documentRepository.save(new VehicleDocument(vehicleId, VehicleDocumentType.OC_POLICY,
