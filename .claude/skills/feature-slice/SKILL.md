@@ -64,7 +64,14 @@ Defaults when the description is silent:
 - Seed data:
   - a top-level entity gets one `V<n>__<table>_seed.sql` with 3 rows, emails on `@example.test`;
   - a nested entity gets no seed.
-- Detail heading is the first String field. The list shows every field, and the first one links to the detail.
+- Detail heading: the fields a person uses to identify the record, joined with a space, as `vehicle-detail.html` does with `make` + `model`. Examples:
+  - `firstName` + `lastName`;
+  - `name`;
+  - `title`;
+  - `number`.
+
+  If no field fits, use the first String field.
+- The list shows every field, and the first one links to the detail.
 - Plural is the regular English plural (`category` -> `categories`).
 
 ## 3. Type mapping
