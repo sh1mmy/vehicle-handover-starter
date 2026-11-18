@@ -155,3 +155,49 @@ Tej części skill z założenia nie generuje.
   - logika jako czysty kod z `Clock`.
 - Zmiana w module pojazdów: `registeredByDealer` według `INTENT.md` §7, ze starymi konstruktorami.
 - UI: akcje Verify/Reject dla `PENDING` i blok gotowości do wydania w szczegółach pojazdu (R18).
+
+## Krok 6b: reguły biznesowe ręcznie, test-first
+
+Wszystko poza wzorcem modułu pojazdów zostało napisane ręcznie. Po każdym punkcie był zielony `./test.sh` i osobny commit:
+
+| Commit | Co |
+|---|---|
+| `a7f65f3` | `VehicleDocumentStatusTransitions` (czysta klasa) + `PUT .../status`: tylko `PENDING → VERIFIED/REJECTED`, reszta 409; `null` i nieznana wartość dają 400, dokument innego pojazdu 404 |
+| `4cedbd4` | 409 przy drugim aktywnym dokumencie typu (tylko serwis, Z8); `expiryDate` < `issueDate` daje 400 na polu `expiryDate` (walidator na poziomie rekordu) |
+| `b7bc4b3` | `registeredByDealer` w backendzie: migracja V7 `DEFAULT FALSE`, prymitywny `boolean`, stare konstruktory |
+| `afb0e63` | `HandoverReadinessCheck` (czysta klasa, 17 testów jednostkowych z INTENT §2), serwis z wstrzykiwanym `Clock`, `GET .../handover-readiness`, dwa testy integracyjne |
+| `b4377a0` | blok gotowości w szczegółach pojazdu |
+| `f79c2aa` | checkbox `registeredByDealer` w formularzu i Yes/No w szczegółach |
+| `a32cd08` | przyciski Verify/Reject przy dokumentach `PENDING`, przeładowanie listy po sukcesie, 409 pokazany jak `deleteError` |
+
+Wynik: backend 143 testy, frontend 34.
+
+### Zgoda na zmianę dwóch istniejących testów
+- **Problem:** testy „creates the vehicle and navigates to its details” i „loads the vehicle in edit mode and updates it” w `vehicle-form.spec.ts` sprawdzają całe body żądania przez `toEqual`. Checkbox `registeredByDealer` (R19) dodaje do body nowe pole, więc oba testy musiały się zmienić.
+- **Dlaczego AI się zatrzymało:** `CLAUDE.md` zabrania zmiany testu, żeby przeszedł. AI zatrzymało się przed tą zmianą i zapytało właściciela.
+- **Decyzja właściciela:** zgoda, bo to nowe wymaganie (R19), a nie dopasowanie testu do kodu.
+- **Asercje zostały tak samo ścisłe:**
+  - w create pełne body z `registeredByDealer: false` (pole niezaznaczone);
+  - w edycji pełne body z wartością z backendu (`true`).
+- **Nowy test:** „sends registeredByDealer true when the checkbox is ticked”.
+- Testy backendu modułu pojazdów zostały bez żadnej zmiany: nowe przypadki są w osobnych klasach `VehicleRegisteredByDealer*Test`, a `git diff` istniejących plików jest pusty.
+
+### Błąd zerowania flagi przy edycji (wyłapało AI)
+- **Problem:** po commicie backendu (`b7bc4b3`) frontend nie znał pola `registeredByDealer`. PUT jest pełną podmianą (INTENT §7), a brak pola daje `false`, więc każda edycja pojazdu w UI zerowałaby flagę ustawioną wcześniej.
+- **Jak wyłapane:** AI zgłosiło to przy commicie backendu, zanim błąd trafił do UI.
+- **Poprawka:** checkbox w `f79c2aa`. Test edycji z `registeredByDealer: true` z backendu jest teraz testem regresji. Przed implementacją był czerwony właśnie dlatego, że PUT wysyłał body bez flagi.
+
+### Dwa błędne testy poprawione przed commitem
+Oba to moje nowe testy z tego samego kroku. W żadnym przypadku nie zmieniono reguły ani kodu pod test.
+1. **`HandoverReadinessCheckTest.ordersMissingTypesAndProblemsByDocumentTypeThenReason`.**
+   - Problem: test bez daty wydania dawał polisie datę ważności `HANDOVER - 1 dzień` (2026-12-14). Według Z4 bez daty wydania porównujemy z dziś (2026-11-18), więc polisa nie była przeterminowana i `EXPIRED` słusznie się nie pojawiało.
+   - Poprawka: dane testu, ważność przed dziś. Reguła została bez zmian.
+2. **`vehicle-detail.spec.ts`.**
+   - Problem: `beforeEach` czekał na `fixture.whenStable()`, a żądanie gotowości było jeszcze otwarte. `whenStable` czeka na HTTP, więc pierwszy test wisiał 10 s i pociągnął pozostałe.
+   - Poprawka: `whenStable` dopiero po `flush` w każdym teście.
+
+Do tego helper w nowym teście checkboxa: samo zdarzenie `change` nie aktualizuje Signal Forms, więc helper używa `click()`, jak użytkownik.
+
+### Uczciwie o test-first
+- W punktach 1 (przejścia statusu), 4 (gotowość), 5 (blok gotowości) i przy checkboxie oraz Verify/Reject testy były uruchomione i czerwone przed implementacją (brak klas albo nieprzechodzące asercje).
+- W punkcie 2 (409 przy aktywnym typie, `expiryDate` < `issueDate`) testy zostały napisane przed implementacją, ale **nie były najpierw uruchomione na czerwono**. Pierwszy raz uruchomiłem je razem z gotowym kodem. Nie ma więc dowodu, że każdy z nich padał bez implementacji, choć asercje sprawdzają konkretne komunikaty i pola.
