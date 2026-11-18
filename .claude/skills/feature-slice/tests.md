@@ -1,6 +1,6 @@
 # Required tests
 
-Every case below is required. Names follow the vehicle tests exactly: substitute `<Entity>` and `<Unique>`.
+Every case below is required. URLs use the URL segment from SKILL.md step 2 (`<segment>`), messages use the display name. Names follow the vehicle tests exactly: substitute `<Entity>` and `<Unique>`.
 
 Every `@Pattern` and `@Email` field is covered by a format test: either broken in `invalidBody()` (with its message asserted) or in its own `...HasInvalidFormat` test.
 
@@ -17,7 +17,7 @@ Setup:
 |---|---|
 | `findAllReturns<Entities>` | 200, `$.length()`, `$[0].id`, one `$[0].<field>` per type (an enum as its string, a date as `yyyy-MM-dd`) |
 | `findByIdReturns<Entity>` | 200, one field |
-| `findByIdReturnsNotFoundProblemWhen<Entity>DoesNotExist` | 404, `APPLICATION_PROBLEM_JSON`, `$.status`, `$.detail` = `"<Entity> with id 99 not found"` |
+| `findByIdReturnsNotFoundProblemWhen<Entity>DoesNotExist` | 404, `APPLICATION_PROBLEM_JSON`, `$.status`, `$.detail` = `"<Display name> with id 99 not found"` |
 | `createReturnsCreated<Entity>` | 201, `Location` = `http://localhost/api/<entities>/1`, `$.id` |
 | `createReturnsBadRequestProblemWithFieldErrorsWhenRequestIsInvalid` | 400, `$.detail` = `Validation failed`, `$.errors.length()` = 3, every `field` and `message` in sorted order, `verifyNoInteractions(service)` |
 | `createReturnsEnglishValidationMessagesWhenAcceptLanguageIsPolish` | `Accept-Language: pl`, one blank field, message `must not be blank` |
@@ -38,7 +38,8 @@ Rules:
 - Validation order is sorted by field name. Compute it from `invalidBody()`, do not guess.
 - A date rule relative to today additionally needs:
   - `@Import(ClockConfig.class)` plus a `@TestConfiguration` with a `@Bean @Primary Clock` returning `Clock.fixed(...)`;
-  - one test for 201 on the fixed day and one for 400 on the day after.
+  - one test for 201 on the fixed day and one for 400 on the day after;
+  - the fixed day lies in the past (e.g. `LocalDate.of(2025, 6, 15)`), so the day after is also in the past for the system clock. Only then does the 400 prove that the validator uses the app `Clock`; with today's date the test passes even when `ClockProvider` is not wired.
 
 ## `<Entity>ServiceTest`
 Setup:
@@ -49,7 +50,7 @@ Setup:
 | Test | Asserts |
 |---|---|
 | `findAllReturnsMapped<Entities>` | stubs `findAll(Sort.by("id"))`, `extracting(...).containsExactly(...)` |
-| `findByIdThrowsNotFoundWhen<Entity>DoesNotExist` | `hasMessage("<Entity> with id 99 not found")` |
+| `findByIdThrowsNotFoundWhen<Entity>DoesNotExist` | `hasMessage("<Display name> with id 99 not found")` |
 | `createSaves<Entity>` | `save` answers its argument, one assert per field |
 | `createThrowsConflictWhen<Unique>AlreadyExists` | exact message, `verify(repository, never()).save(any())` |
 | `updateChangesExisting<Entity>` | the entity is mutated, `verify(repository).save(entity)` |
@@ -77,9 +78,9 @@ Setup:
 
 | Test (`it(...)`) | Asserts |
 |---|---|
-| `shows required errors and sends nothing when the form is empty` | `http.expectNone('/api/<folder>')`, every required message in field order |
+| `shows required errors and sends nothing when the form is empty` | `http.expectNone('/api/<segment>')`, every required message in field order |
 | `leaves format and range rules to the backend` | invalid format values are sent; the backend 400 `errors` are shown |
-| `creates the <label> and navigates to its details` | the POST body `toEqual` the full request (optional fields `null`), navigate to `['/<folder>', 7]` |
+| `creates the <label> and navigates to its details` | the POST body `toEqual` the full request (optional fields `null`), navigate to `['/<segment>', 7]` |
 | `loads the <label> in edit mode and updates it` | `setInput('id', '3')`, GET, change one field, the PUT body `toEqual`, navigate |
 | `shows a dedicated message when the <label> to edit does not exist` | 404 -> `'<Label> not found'` |
 | `shows the ProblemDetail detail when loading the <label> fails` | 503 -> detail |

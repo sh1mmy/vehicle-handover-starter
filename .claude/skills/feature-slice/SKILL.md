@@ -33,7 +33,8 @@ Derive names (example `ServiceVisit`):
 | Java package | lowercase singular, no separators | `servicevisit` |
 | Class prefix | PascalCase singular | `ServiceVisit` |
 | Table | snake_case singular | `service_visit` |
-| URL | `/api/` + kebab-case plural | `/api/service-visits` |
+| URL segment | kebab-case plural, unless the description gives a segment | `/api/service-visits` |
+| Display name | the UI label: the class name split into words, sentence case; when the description gives a URL segment, its singular | `Service visit`; segment `documents` -> `Document` |
 | Frontend folder | kebab-case plural | `frontend/src/app/service-visits/` |
 | Frontend files | kebab-case singular prefix | `service-visit-list.ts` |
 
@@ -43,7 +44,7 @@ Defaults when the description is silent:
 - Field type is `String`, and String length is 100.
 - Every field is required, unless the description says optional.
 - A field is unique only when the description says so.
-- Enum labels are the value in sentence case (`IN_PROGRESS` -> `In progress`).
+- Enum labels are the value in sentence case, with acronyms kept in capitals (`IN_PROGRESS` -> `In progress`, `COC` -> `COC`, `OC_POLICY` -> `OC policy`, `REGISTRATION_POA` -> `Registration POA`). A word is an acronym when it has no vowel or is a known abbreviation (VIN, NIP, VAT, POA, OC, COC).
 - Operations are full CRUD: list, get, create, update, delete.
 - Operation subsets: when the description lists operations (e.g. `operations: list, create`), generate only those.
   An omitted operation has no endpoint, service method, API method, UI and tests:
@@ -90,7 +91,16 @@ Defaults when the description is silent:
 
 Rules:
 - Date rules relative to today use the app `Clock` through `ClockProvider` (see [backend.md](backend.md), "Clock").
-- Conflict message: `"<Entity> with <field> <value> already exists"`.
+- Read-only fields (e.g. a status set by the system):
+  - not in `<Entity>Request`, not in the form model, no form control;
+  - set in the entity constructor to the value the description gives (e.g. `this.status = Status.PENDING;`), with a getter and no setter;
+  - present in `<Entity>Response`, the TypeScript type, the list and the detail;
+  - `Omit<...>` in `<Entity>Request` (TS) lists them next to `id`;
+  - the service test asserts the value after create.
+- Messages and UI texts use the display name from step 2, never the raw class name:
+  - not found: `"<Display name> with id X not found"`;
+  - frontend: `'<Display name> not found'`, headings and links (see `<Label>` in [frontend.md](frontend.md)).
+- Conflict message: `"<Display name> with <field> <value> already exists"`.
   - Write `<field>` as in the UI label: acronyms in capitals (`VIN`, `NIP`), every other word in lowercase.
   - Examples: `Vehicle with VIN X already exists`, `Customer with email x already exists`.
 

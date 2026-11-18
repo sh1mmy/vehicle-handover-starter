@@ -5,9 +5,10 @@
 |---|---|---|
 | `<Entity>` / `<entity>` | class name / camelCase variable | `Supplier` / `supplier` |
 | `<entities>` | camelCase plural (variables) | `suppliers` |
-| `<folder>` | kebab-case plural (folder, route path, URL) | `suppliers` |
+| `<folder>` | kebab-case plural (folder and file paths only) | `suppliers` |
+| `<segment>` | URL segment and route path; equals `<folder>` unless the description gives a segment | `suppliers`; nested documents: `documents` |
 | `<file>` | kebab-case singular file prefix | `supplier` |
-| `<Label>` / `<label>` | UI label singular, capitalised / lowercase | `Category` / `category` |
+| `<Label>` / `<label>` | the display name from SKILL.md step 2, capitalised / lowercase | `Category` / `category`; `Document` / `document` |
 | `<Labels>` / `<labels>` | UI label plural, using the plural rule from SKILL.md step 2 | `Categories` / `categories` |
 
 Use the same example fields as [backend.md](backend.md): `name`, `email`, optional `rating`, enum `status`.
@@ -40,7 +41,7 @@ export type <Entity>Request = Omit<<Entity>, 'id'>;
 @Injectable({ providedIn: 'root' })
 export class <Entity>Api {
   private readonly http = inject(HttpClient);
-  private readonly url = '/api/<folder>';
+  private readonly url = '/api/<segment>';
 
   list() {
     return httpResource<<Entity>[]>(() => this.url, { defaultValue: [] });
@@ -73,7 +74,7 @@ Copy `vehicle-list.ts` and `vehicle-list.html`, renaming `vehicle` -> `<entity>`
 - `deleteError` signal, `loadError(error)` with `loadErrorMessage(error, '<Labels> not found')`;
 - `delete()` with `firstValueFrom` then `this.<entities>.reload()`, catching into `problemDetailMessage`;
 - the template:
-  - `<h1><Labels></h1>`, `<p><a routerLink="/<folder>/new">Add <label></a></p>`;
+  - `<h1><Labels></h1>`, `<p><a routerLink="/<segment>/new">Add <label></a></p>`;
   - `isLoading` / `error` / `value` branches;
   - a table with one column per field plus `Actions` (Edit link + Delete button);
   - `@empty` row `No <labels> yet.` with `colspan` = number of columns.
@@ -155,7 +156,7 @@ export class <Entity>Form {
                 ? this.<entity>Api.create(request)
                 : this.<entity>Api.update(id, request),
             );
-            await this.router.navigate(['/<folder>', saved.id]);
+            await this.router.navigate(['/<segment>', saved.id]);
             return undefined;
           } catch (error) {
             return problemDetailToFormErrors(error, <entity>Form);
@@ -235,13 +236,13 @@ export const <entities>Routes: Routes = [
 Append to `routes` after the existing feature routes:
 ```ts
 {
-  path: '<folder>',
+  path: '<segment>',
   loadChildren: () => import('./<folder>/<folder>.routes').then((m) => m.<entities>Routes),
 },
 ```
 Append to `<nav>` after the existing links:
 ```html
-<a routerLink="/<folder>" routerLinkActive="active"><Labels></a>
+<a routerLink="/<segment>" routerLinkActive="active"><Labels></a>
 ```
 
 ## Nested
@@ -250,7 +251,7 @@ Placeholders: `<parents>` (parent folder and URL), `<parent>Id` (route param and
 API: every method takes the parent id first. The URL is built per call:
 ```ts
 private url(<parent>Id: number): string {
-  return `/api/<parents>/${<parent>Id}/<folder>`;
+  return `/api/<parents>/${<parent>Id}/<segment>`;
 }
 
 list(<parent>Id: Signal<number>) {
@@ -267,7 +268,7 @@ get(<parent>Id: Signal<number>, id: Signal<number | undefined>) {
 
 Components:
 - Each component gets `readonly <parent>Id = input.required({ transform: numberAttribute });`.
-- Every link and navigation is `['/<parents>', <parent>Id(), '<folder>', ...]`.
+- Every link and navigation is `['/<parents>', <parent>Id(), '<segment>', ...]`.
 - The list's back link goes to the parent detail.
 
 Routes:
@@ -275,7 +276,7 @@ Routes:
 - In `app.routes.ts`, register the child **before** the parent's lazy route:
   ```ts
   {
-    path: '<parents>/:<parent>Id/<folder>',
+    path: '<parents>/:<parent>Id/<segment>',
     loadChildren: () => import('./<folder>/<folder>.routes').then((m) => m.<entities>Routes),
   },
   ```
@@ -284,4 +285,4 @@ Routes:
 Parent link:
 - No nav link.
 - Add one line to the parent detail template, after its Edit link:
-  `<p><a [routerLink]="['/<parents>', <parent>.id, '<folder>']"><Labels></a></p>`.
+  `<p><a [routerLink]="['/<parents>', <parent>.id, '<segment>']"><Labels></a></p>`.

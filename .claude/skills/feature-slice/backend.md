@@ -205,11 +205,11 @@ public class <Entity>Service {
 
     private <Entity> get<Entity>(Long id) {
         return <entity>Repository.findById(id)
-                .orElseThrow(() -> new NotFoundException("<Entity> with id " + id + " not found"));
+                .orElseThrow(() -> new NotFoundException("<Display name> with id " + id + " not found"));
     }
 
     private static ConflictException <unique>AlreadyExists(<UniqueType> <unique>) {
-        return new ConflictException("<Entity> with <field label> " + <unique> + " already exists");
+        return new ConflictException("<Display name> with <field label> " + <unique> + " already exists");
     }
 }
 ```
@@ -344,7 +344,7 @@ private void require<Parent>(Long <parent>Id) {
 
 private <Entity> get<Entity>(Long <parent>Id, Long id) {
     return <entity>Repository.findByIdAnd<Parent>Id(id, <parent>Id)
-            .orElseThrow(() -> new NotFoundException("<Entity> with id " + id + " not found"));
+            .orElseThrow(() -> new NotFoundException("<Display name> with id " + id + " not found"));
 }
 ```
 Controller:
