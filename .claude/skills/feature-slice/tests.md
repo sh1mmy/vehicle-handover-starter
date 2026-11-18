@@ -2,6 +2,8 @@
 
 Every case below is required. Names follow the vehicle tests exactly: substitute `<Entity>` and `<Unique>`.
 
+Every `@Pattern` and `@Email` field is covered by a format test: either broken in `invalidBody()` (with its message asserted) or in its own `...HasInvalidFormat` test.
+
 Skip a case only when its feature is absent (e.g. no unique field means no conflict cases), and list each skipped case in the summary.
 
 ## `<Entity>ControllerTest`
@@ -21,6 +23,7 @@ Setup:
 | `createReturnsEnglishValidationMessagesWhenAcceptLanguageIsPolish` | `Accept-Language: pl`, one blank field, message `must not be blank` |
 | `createReturnsBadRequestProblemWithFieldErrorWhen<Enum>IsUnknown` (per enum) | 400, message `must be one of: A, B` in enum order |
 | `createReturnsBadRequestProblemWithFieldErrorWhenValueHasWrongType` | a number field sent as a string, message `has an invalid value` |
+| `createReturnsBadRequestProblemWithFieldErrorWhen<Field>HasInvalidFormat` (one per `@Pattern` / `@Email` field not broken in `invalidBody()`) | one invalid value replaced in `VALID_BODY`, `$.errors.length()` = 1, the field and its exact message, `verifyNoInteractions(service)` |
 | `createReturnsBadRequestProblemWhenBodyIsNotJson` | `field` null, `request body must be valid JSON` |
 | `createReturnsConflictProblemWhen<Unique>AlreadyExists` | 409, the exact conflict message |
 | `createReturnsConflictProblemWhenDatabaseConstraintIsViolated` | service throws `DataIntegrityViolationException("uq_<table>_<column>")`, `detail` = `Request conflicts with existing data` |
