@@ -17,6 +17,7 @@ describe('VehicleDetail', () => {
     productionYear: 2026,
     fuelType: 'HYBRID',
     plannedHandoverDate: null,
+    registeredByDealer: true,
   };
 
   // No whenStable() here: it would wait for the readiness request, which each test flushes itself.
@@ -50,6 +51,17 @@ describe('VehicleDetail', () => {
       item.textContent!.trim(),
     );
   }
+
+  it('shows whether the dealer registers the vehicle', async () => {
+    await flushReadiness({ ready: true, missingDocumentTypes: [], problems: [] });
+
+    await vi.waitFor(() => {
+      const labels = Array.from(element.querySelectorAll('dt'), (term) => term.textContent!.trim());
+      const index = labels.indexOf('Registered by dealer');
+      expect(index).toBeGreaterThan(-1);
+      expect(element.querySelectorAll('dd')[index].textContent!.trim()).toBe('Yes');
+    });
+  });
 
   it('shows that the vehicle is ready for handover', async () => {
     await flushReadiness({ ready: true, missingDocumentTypes: [], problems: [] });

@@ -33,6 +33,11 @@ describe('VehicleForm', () => {
     select.dispatchEvent(new Event('input'));
   }
 
+  function check(): void {
+    // A real click toggles the box and fires input and change, like the user does.
+    element.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+  }
+
   function fillValidVehicle(): void {
     fill('text', 0, 'WVWZZZ1KZAW000001');
     fill('text', 1, 'Volkswagen');
@@ -111,10 +116,22 @@ describe('VehicleForm', () => {
       productionYear: 2025,
       fuelType: 'PETROL',
       plannedHandoverDate: '2026-12-15',
+      registeredByDealer: false,
     });
     request.flush({ id: 7, ...request.request.body });
 
     await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(['/vehicles', 7]));
+  });
+
+  it('sends registeredByDealer true when the checkbox is ticked', async () => {
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    fillValidVehicle();
+    check();
+    await submit();
+
+    const request = http.expectOne({ method: 'POST', url: '/api/vehicles' });
+    expect(request.request.body.registeredByDealer).toBe(true);
+    request.flush({ id: 8, ...request.request.body });
   });
 
   it('loads the vehicle in edit mode and updates it', async () => {
@@ -127,6 +144,7 @@ describe('VehicleForm', () => {
       productionYear: 2026,
       fuelType: 'HYBRID',
       plannedHandoverDate: null,
+      registeredByDealer: true,
     };
     fixture.componentRef.setInput('id', '3');
     fixture.detectChanges();
@@ -143,6 +161,7 @@ describe('VehicleForm', () => {
       productionYear: 2026,
       fuelType: 'HYBRID',
       plannedHandoverDate: null,
+      registeredByDealer: true,
     });
     request.flush({ ...vehicle, model: 'Superb' });
 
