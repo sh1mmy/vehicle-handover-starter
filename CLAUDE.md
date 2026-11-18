@@ -41,7 +41,10 @@ Requirements and assumptions: `INTENT.md`. The API contract in `BRIEF.md` (paths
 ## Database and migrations
 - Flyway, `backend/src/main/resources/db/migration/V<n>__<snake_case>.sql`. The next number is the highest existing `V<n>` plus one. Never edit an existing migration.
 - `ddl-auto=validate`: every mapped column must exist in a migration with a matching type and length, or the app does not start.
-- New fields on existing entities are optional with a default (nullable in the request, `DEFAULT` in the migration), so existing request bodies stay valid.
+- New fields on existing entities are optional with a default, so existing request bodies stay valid:
+  - in the request, a primitive `boolean` or a nullable type mapped to the default;
+  - in the migration, `DEFAULT`;
+  - the old constructor signatures are kept, so existing tests compile unchanged.
 - Seed data is a migration, so it is also present in `@DataJpaTest`. Repository tests use values that cannot collide with the seed (e.g. VIN `...0000004`, emails `@example.test`).
 - Do not modify or add data to the seeded vehicles 1-3. They are the documented starting state, see `INTENT.md` §8.
 
