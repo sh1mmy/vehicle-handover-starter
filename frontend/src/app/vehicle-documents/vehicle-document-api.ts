@@ -56,4 +56,12 @@ export class VehicleDocumentApi {
   create(vehicleId: number, request: VehicleDocumentRequest): Observable<VehicleDocument> {
     return this.http.post<VehicleDocument>(this.url(vehicleId), request);
   }
+
+  changeStatus(
+    vehicleId: number,
+    id: number,
+    status: VehicleDocumentStatus,
+  ): Observable<VehicleDocument> {
+    return this.http.put<VehicleDocument>(`${this.url(vehicleId)}/${id}/status`, { status });
+  }
 }

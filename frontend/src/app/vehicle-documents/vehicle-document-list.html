@@ -4,6 +4,10 @@
 
 <p><a [routerLink]="['/vehicles', vehicleId(), 'documents', 'new']">Add document</a></p>
 
+@if (statusError(); as message) {
+  <p class="error" role="alert">{{ message }}</p>
+}
+
 @if (documents.isLoading()) {
   <p>Loading…</p>
 } @else if (documents.error(); as error) {
@@ -17,6 +21,7 @@
         <th>Issue date</th>
         <th>Expiry date</th>
         <th>Status</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -31,10 +36,16 @@
           <td>{{ document.issueDate }}</td>
           <td>{{ document.expiryDate ?? '—' }}</td>
           <td>{{ statusLabels[document.status] }}</td>
+          <td>
+            @if (document.status === 'PENDING') {
+              <button type="button" (click)="changeStatus(document, 'VERIFIED')">Verify</button>
+              <button type="button" (click)="changeStatus(document, 'REJECTED')">Reject</button>
+            }
+          </td>
         </tr>
       } @empty {
         <tr>
-          <td colspan="5">No documents yet.</td>
+          <td colspan="6">No documents yet.</td>
         </tr>
       }
     </tbody>
