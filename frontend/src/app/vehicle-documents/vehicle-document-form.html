@@ -1,0 +1,55 @@
+<h1>New document</h1>
+
+<form [formRoot]="documentForm">
+  @for (error of documentForm().errors(); track error) {
+    <p class="error" role="alert">{{ error.message }}</p>
+  }
+
+  <label>
+    Type
+    <select [formField]="documentForm.type">
+      <option value="">Select type</option>
+      @for (type of types; track type) {
+        <option [value]="type">{{ typeLabels[type] }}</option>
+      }
+    </select>
+  </label>
+  @if (documentForm.type().touched()) {
+    @for (error of documentForm.type().errors(); track error) {
+      <p class="error" role="alert">{{ error.message }}</p>
+    }
+  }
+
+  <label>
+    Number
+    <input type="text" [formField]="documentForm.number" />
+  </label>
+  @if (documentForm.number().touched()) {
+    @for (error of documentForm.number().errors(); track error) {
+      <p class="error" role="alert">{{ error.message }}</p>
+    }
+  }
+
+  <label>
+    Issue date
+    <input type="date" [formField]="documentForm.issueDate" />
+  </label>
+  @if (documentForm.issueDate().touched()) {
+    @for (error of documentForm.issueDate().errors(); track error) {
+      <p class="error" role="alert">{{ error.message }}</p>
+    }
+  }
+
+  <label>
+    Expiry date
+    <input type="date" [formField]="documentForm.expiryDate" />
+  </label>
+  @if (documentForm.expiryDate().touched()) {
+    @for (error of documentForm.expiryDate().errors(); track error) {
+      <p class="error" role="alert">{{ error.message }}</p>
+    }
+  }
+
+  <button type="submit" [disabled]="documentForm().submitting()">Save</button>
+  <a [routerLink]="['/vehicles', vehicleId(), 'documents']">Cancel</a>
+</form>

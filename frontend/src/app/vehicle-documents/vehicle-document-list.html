@@ -1,0 +1,42 @@
+<p><a [routerLink]="['/vehicles', vehicleId()]">Back to vehicle</a></p>
+
+<h1>Documents</h1>
+
+<p><a [routerLink]="['/vehicles', vehicleId(), 'documents', 'new']">Add document</a></p>
+
+@if (documents.isLoading()) {
+  <p>Loading…</p>
+} @else if (documents.error(); as error) {
+  <p class="error" role="alert">{{ loadError(error) }}</p>
+} @else if (documents.value(); as documents) {
+  <table>
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Number</th>
+        <th>Issue date</th>
+        <th>Expiry date</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (document of documents; track document.id) {
+        <tr>
+          <td>
+            <a [routerLink]="['/vehicles', vehicleId(), 'documents', document.id]">{{
+              typeLabels[document.type]
+            }}</a>
+          </td>
+          <td>{{ document.number }}</td>
+          <td>{{ document.issueDate }}</td>
+          <td>{{ document.expiryDate ?? '—' }}</td>
+          <td>{{ statusLabels[document.status] }}</td>
+        </tr>
+      } @empty {
+        <tr>
+          <td colspan="5">No documents yet.</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

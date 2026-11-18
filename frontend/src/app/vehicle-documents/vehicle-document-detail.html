@@ -1,0 +1,26 @@
+<p><a [routerLink]="['/vehicles', vehicleId(), 'documents']">Back to documents</a></p>
+
+@if (document.isLoading()) {
+  <p>Loading…</p>
+} @else if (document.error(); as error) {
+  <p class="error" role="alert">{{ loadError(error) }}</p>
+} @else if (document.value(); as document) {
+  <h1>{{ typeLabels[document.type] }} {{ document.number }}</h1>
+
+  <dl>
+    <dt>Type</dt>
+    <dd>{{ typeLabels[document.type] }}</dd>
+
+    <dt>Number</dt>
+    <dd>{{ document.number }}</dd>
+
+    <dt>Issue date</dt>
+    <dd>{{ document.issueDate }}</dd>
+
+    <dt>Expiry date</dt>
+    <dd>{{ document.expiryDate ?? '—' }}</dd>
+
+    <dt>Status</dt>
+    <dd>{{ statusLabels[document.status] }}</dd>
+  </dl>
+}
