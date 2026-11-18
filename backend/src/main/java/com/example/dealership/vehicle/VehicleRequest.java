@@ -27,6 +27,14 @@ public record VehicleRequest(
         @NotNull
         FuelType fuelType,
 
-        LocalDate plannedHandoverDate
+        LocalDate plannedHandoverDate,
+
+        // Optional: a missing field or null becomes false, so request bodies from before this field stay valid.
+        boolean registeredByDealer
 ) {
+
+    public VehicleRequest(String vin, String make, String model, Integer productionYear, FuelType fuelType,
+            LocalDate plannedHandoverDate) {
+        this(vin, make, model, productionYear, fuelType, plannedHandoverDate, false);
+    }
 }

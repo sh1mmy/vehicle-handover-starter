@@ -1,0 +1,1 @@
+ALTER TABLE vehicle ADD COLUMN registered_by_dealer BOOLEAN DEFAULT FALSE NOT NULL;
