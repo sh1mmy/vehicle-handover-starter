@@ -148,10 +148,11 @@
 
 1. **Migracja** `V{n}__vehicle_registered_by_dealer.sql`: `ALTER TABLE vehicle ADD COLUMN registered_by_dealer BOOLEAN DEFAULT FALSE NOT NULL`. Istniejące wiersze i seed dostają `false`.
 2. **`Vehicle`**: pole `registeredByDealer` (`boolean`).
-3. **`VehicleRequest`**: nowe, **opcjonalne** pole `Boolean registeredByDealer`. `null` lub brak pola oznacza `false`. Obecne body (bez pola) dalej przechodzą walidację, a obecne testy nie wymagają zmian.
+3. **`VehicleRequest`**: nowe, **opcjonalne** pole prymitywne `boolean registeredByDealer`. Brak pola lub `null` daje `false` (domyślne zachowanie Jacksona dla typów prymitywnych). Obecne body (bez pola) dalej przechodzą walidację.
+   - `VehicleRequest`, `VehicleResponse` i `Vehicle` dostają dodatkowy konstruktor z dotychczasową listą argumentów, delegujący z `false`. Dzięki temu istniejące testy (`new VehicleRequest(...)` itd.) kompilują się bez zmian.
    - Konsekwencja do akceptacji: PUT jest pełną podmianą (tak jak `plannedHandoverDate`), więc stary klient wysyłający PUT bez pola wyzeruje flagę. To jest spójne z obecną semantyką PUT.
 4. **`VehicleResponse`**: dodatkowe pole `registeredByDealer` (zawsze `true`/`false`). Dodanie pola do odpowiedzi nie łamie klientów.
-5. **`VehicleMapper`**: mapowanie `null → false`.
+5. **`VehicleMapper`**: przepisuje wartość wprost, bez mapowania `null`.
 6. **Usuwanie pojazdu**: bez zmian w kodzie. Przy istniejących dokumentach FK daje 409 przez obecny handler (Z13). Pojazd bez dokumentów dalej zwraca 204.
 7. **Frontend**:
    - `vehicle-api.ts`: pole `registeredByDealer: boolean` w `Vehicle`.
@@ -164,7 +165,7 @@
 ## 8. Zgodność wsteczna i dane startowe
 
 1. **Istniejące API pojazdów działa bez zmian dla obecnych klientów.**
-   - `registeredByDealer` jest w `VehicleRequest` **opcjonalne**, brak pola lub `null` oznacza `false`. Stare body bez tego pola dalej przechodzą walidację i zwracają te same kody (201/200).
+   - `registeredByDealer` jest w `VehicleRequest` **opcjonalne** (prymitywny `boolean`), brak pola lub `null` oznacza `false`. Stare body bez tego pola dalej przechodzą walidację i zwracają te same kody (201/200).
    - To świadomie inaczej niż `fuel_type` z `V3`, które jest wymagane (`@NotNull`, `SET NOT NULL`). Tam stare body bez `fuelType` dostają 400, tutaj nie.
    - Kolumna: `registered_by_dealer BOOLEAN DEFAULT FALSE NOT NULL`. Default w DDL wystarcza, więc migracja nie robi `UPDATE` seedu (w przeciwieństwie do `V3`).
    - Odpowiedzi dostają tylko nowe pole, żadne istniejące nie zmienia nazwy ani typu. Istniejące testy modułu pojazdów przechodzą bez modyfikacji.
