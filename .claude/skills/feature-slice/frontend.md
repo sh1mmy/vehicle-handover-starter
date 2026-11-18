@@ -7,7 +7,8 @@
 | `<entities>` | camelCase plural (variables) | `suppliers` |
 | `<folder>` | kebab-case plural (folder, route path, URL) | `suppliers` |
 | `<file>` | kebab-case singular file prefix | `supplier` |
-| `<Label>` / `<label>` | UI label singular / plural, sentence case | `Supplier` / `suppliers` |
+| `<Label>` / `<label>` | UI label singular, capitalised / lowercase | `Category` / `category` |
+| `<Labels>` / `<labels>` | UI label plural, using the plural rule from SKILL.md step 2 | `Categories` / `categories` |
 
 Use the same example fields as [backend.md](backend.md): `name`, `email`, optional `rating`, enum `status`.
 
@@ -69,13 +70,13 @@ export class <Entity>Api {
 ## `<file>-list.ts` / `.html`
 Copy `vehicle-list.ts` and `vehicle-list.html`, renaming `vehicle` -> `<entity>`. Keep:
 - `selector: 'app-<file>-list'`, `imports: [RouterLink]`, `templateUrl`;
-- `deleteError` signal, `loadError(error)` with `loadErrorMessage(error, '<Label>s not found')`;
+- `deleteError` signal, `loadError(error)` with `loadErrorMessage(error, '<Labels> not found')`;
 - `delete()` with `firstValueFrom` then `this.<entities>.reload()`, catching into `problemDetailMessage`;
 - the template:
-  - `<h1><Label>s</h1>`, `<p><a routerLink="/<folder>/new">Add <label></a></p>`;
+  - `<h1><Labels></h1>`, `<p><a routerLink="/<folder>/new">Add <label></a></p>`;
   - `isLoading` / `error` / `value` branches;
   - a table with one column per field plus `Actions` (Edit link + Delete button);
-  - `@empty` row `No <label>s yet.` with `colspan` = number of columns.
+  - `@empty` row `No <labels> yet.` with `colspan` = number of columns.
 
 Cells:
 - an optional value: `{{ x ?? '—' }}`;
@@ -240,7 +241,7 @@ Append to `routes` after the existing feature routes:
 ```
 Append to `<nav>` after the existing links:
 ```html
-<a routerLink="/<folder>" routerLinkActive="active"><Label>s</a>
+<a routerLink="/<folder>" routerLinkActive="active"><Labels></a>
 ```
 
 ## Nested
@@ -283,4 +284,4 @@ Routes:
 Parent link:
 - No nav link.
 - Add one line to the parent detail template, after its Edit link:
-  `<p><a [routerLink]="['/<parents>', <parent>.id, '<folder>']"><Label>s</a></p>`.
+  `<p><a [routerLink]="['/<parents>', <parent>.id, '<folder>']"><Labels></a></p>`.

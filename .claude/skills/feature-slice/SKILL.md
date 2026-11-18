@@ -45,6 +45,21 @@ Defaults when the description is silent:
 - A field is unique only when the description says so.
 - Enum labels are the value in sentence case (`IN_PROGRESS` -> `In progress`).
 - Operations are full CRUD: list, get, create, update, delete.
+- Operation subsets: when the description lists operations (e.g. `operations: list, create`), generate only those.
+  An omitted operation has no endpoint, service method, API method, UI and tests:
+
+  | Omitted | Remove |
+  |---|---|
+  | list | `findAll` in controller and service; `list()` in the API; the list component and the `''` route; the nav link; list tests |
+  | get | `GET /{id}` and `findById`; `get()` in the API; the detail component and the `':id'` route; links to the detail; get tests |
+  | create | `POST`, `create` and `<Entity>Mapper.toEntity`; `create()` in the API; the `'new'` route and the Add link; create tests (controller, service, form spec) |
+  | update | `PUT /{id}`, `update`, `updateEntity` and `existsBy<Unique>AndIdNot`; `update()` in the API; the `':id/edit'` route and Edit links; update tests, and in the form spec the edit-mode tests |
+  | delete | `DELETE /{id}` and `delete`; `delete()` in the API; the Delete button and `deleteError`; delete tests |
+
+  - Without both create and update there is no form, no form spec and no `<Entity>Request`.
+  - Without update, the form has no `id` input and no `isEdit`.
+  - A route that remains keeps its place in the order `''`, `'new'`, `':id/edit'`, `':id'`.
+  - With no operation list in the description, the default is full CRUD.
 - There is no parent (a top-level resource).
 - Seed data:
   - a top-level entity gets one `V<n>__<table>_seed.sql` with 3 rows, emails on `@example.test`;
@@ -104,8 +119,9 @@ The URL is `/api/<parents>/{<parent>Id}/<entities>`. Skeletons are in the "Neste
 [backend.md](backend.md), [frontend.md](frontend.md) and [tests.md](tests.md).
 
 - **Foreign key:**
-  - SQL: `<parent>_id BIGINT NOT NULL` + `CONSTRAINT fk_<table>_<parent> FOREIGN KEY (<parent>_id) REFERENCES <parent_table> (id)`.
-  - The entity has a plain `Long <parent>Id`, not `@ManyToOne`.
+  - SQL column: `<parent_table>_id BIGINT NOT NULL`, the parent table name in snake_case plus `_id` (`service_visit_id`, not `servicevisit_id`).
+  - SQL constraint: `CONSTRAINT fk_<table>_<parent_table> FOREIGN KEY (<parent_table>_id) REFERENCES <parent_table> (id)`.
+  - The entity has a plain `Long <parent>Id` (camelCase, `serviceVisitId`) with `@Column(name = "<parent_table>_id")`, not `@ManyToOne`.
 - **DTOs:** the response includes `<parent>Id`, the request does not.
 - **Not found:**
   - Every service method checks the parent first. A missing parent -> `NotFoundException("<Parent> with id X not found")`.
@@ -149,6 +165,7 @@ Check each item against the files and tick it in the summary:
   - no `.component` files, no `Component` suffix;
   - no component CSS, no new CSS classes.
 - [ ] Routes are in the order `''`, `'new'`, `':id/edit'`, `':id'`, and the lazy route and nav link are added.
+- [ ] Operation subset only: no endpoint, service method, API method, route, link, button or test remains for an omitted operation (`grep` for the omitted verbs).
 - [ ] Client validation is `required()` only, and server errors go through `problemDetailToFormErrors`.
 - [ ] Repository tests use values that cannot collide with seed data.
 - [ ] Nested only:
