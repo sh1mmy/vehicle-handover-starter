@@ -1,0 +1,1529 @@
+=== backend/src/test/java/com/example/dealership/error/GlobalExceptionHandlerTest.java
+     1	package com.example.dealership.error;
+     2	
+     3	import static org.assertj.core.api.Assertions.assertThat;
+     4	
+     5	import java.util.List;
+     6	
+     7	import org.junit.jupiter.api.Test;
+     8	import org.springframework.http.ProblemDetail;
+     9	import org.springframework.validation.BeanPropertyBindingResult;
+    10	import org.springframework.validation.FieldError;
+    11	import org.springframework.web.bind.MethodArgumentNotValidException;
+    12	
+    13	class GlobalExceptionHandlerTest {
+    14	
+    15	    private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+    16	
+    17	    @Test
+    18	    void handleMethodArgumentNotValidReturnsObjectLevelErrorsWithNullFieldBeforeFieldErrors() {
+    19	        BeanPropertyBindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "request");
+    20	        bindingResult.reject("invalid", "is not consistent");
+    21	        bindingResult.addError(new FieldError("request", "name", "must not be blank"));
+    22	
+    23	        ProblemDetail problem = handler.handleMethodArgumentNotValid(
+    24	                new MethodArgumentNotValidException(null, bindingResult));
+    25	
+    26	        assertThat(problem.getStatus()).isEqualTo(400);
+    27	        assertThat(problem.getDetail()).isEqualTo("Validation failed");
+    28	        assertThat(problem.getProperties()).containsEntry("errors", List.of(
+    29	                new ValidationError(null, "is not consistent"),
+    30	                new ValidationError("name", "must not be blank")));
+    31	    }
+    32	}
+=== backend/src/test/java/com/example/dealership/vehicle/VehicleControllerTest.java
+     1	package com.example.dealership.vehicle;
+     2	
+     3	import static org.hamcrest.Matchers.nullValue;
+     4	import static org.mockito.ArgumentMatchers.any;
+     5	import static org.mockito.ArgumentMatchers.eq;
+     6	import static org.mockito.Mockito.doThrow;
+     7	import static org.mockito.Mockito.verify;
+     8	import static org.mockito.Mockito.verifyNoInteractions;
+     9	import static org.mockito.Mockito.when;
+    10	import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+    11	import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+    12	import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+    13	import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+    14	import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+    15	import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+    16	import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+    17	import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+    18	
+    19	import java.time.LocalDate;
+    20	import java.time.Year;
+    21	import java.util.List;
+    22	
+    23	import com.example.dealership.error.ConflictException;
+    24	import com.example.dealership.error.NotFoundException;
+    25	
+    26	import org.junit.jupiter.api.Test;
+    27	import org.springframework.beans.factory.annotation.Autowired;
+    28	import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+    29	import org.springframework.dao.DataIntegrityViolationException;
+    30	import org.springframework.http.HttpHeaders;
+    31	import org.springframework.http.MediaType;
+    32	import org.springframework.test.context.bean.override.mockito.MockitoBean;
+    33	import org.springframework.test.web.servlet.MockMvc;
+    34	
+    35	@WebMvcTest(VehicleController.class)
+    36	class VehicleControllerTest {
+    37	
+    38	    private static final String VIN = "WVWZZZ1KZAW000001";
+    39	    private static final String VALID_BODY = """
+    40	            {
+    41	              "vin": "WVWZZZ1KZAW000001",
+    42	              "make": "Volkswagen",
+    43	              "model": "Golf",
+    44	              "productionYear": 2025,
+    45	              "fuelType": "PETROL",
+    46	              "plannedHandoverDate": "2026-12-15"
+    47	            }
+    48	            """;
+    49	
+    50	    @Autowired
+    51	    private MockMvc mockMvc;
+    52	
+    53	    @MockitoBean
+    54	    private VehicleService vehicleService;
+    55	
+    56	    @Test
+    57	    void findAllReturnsVehicles() throws Exception {
+    58	        when(vehicleService.findAll()).thenReturn(List.of(response()));
+    59	
+    60	        mockMvc.perform(get("/api/vehicles"))
+    61	                .andExpect(status().isOk())
+    62	                .andExpect(jsonPath("$.length()").value(1))
+    63	                .andExpect(jsonPath("$[0].id").value(1))
+    64	                .andExpect(jsonPath("$[0].vin").value(VIN))
+    65	                .andExpect(jsonPath("$[0].fuelType").value("PETROL"))
+    66	                .andExpect(jsonPath("$[0].plannedHandoverDate").value("2026-12-15"));
+    67	    }
+    68	
+    69	    @Test
+    70	    void findByIdReturnsVehicle() throws Exception {
+    71	        when(vehicleService.findById(1L)).thenReturn(response());
+    72	
+    73	        mockMvc.perform(get("/api/vehicles/1"))
+    74	                .andExpect(status().isOk())
+    75	                .andExpect(jsonPath("$.vin").value(VIN));
+    76	    }
+    77	
+    78	    @Test
+    79	    void findByIdReturnsNotFoundProblemWhenVehicleDoesNotExist() throws Exception {
+    80	        when(vehicleService.findById(99L)).thenThrow(new NotFoundException("Vehicle with id 99 not found"));
+    81	
+    82	        mockMvc.perform(get("/api/vehicles/99"))
+    83	                .andExpect(status().isNotFound())
+    84	                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+    85	                .andExpect(jsonPath("$.status").value(404))
+    86	                .andExpect(jsonPath("$.detail").value("Vehicle with id 99 not found"));
+    87	    }
+    88	
+    89	    @Test
+    90	    void createReturnsCreatedVehicle() throws Exception {
+    91	        when(vehicleService.create(any(VehicleRequest.class))).thenReturn(response());
+    92	
+    93	        mockMvc.perform(post("/api/vehicles").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+    94	                .andExpect(status().isCreated())
+    95	                .andExpect(header().string("Location", "http://localhost/api/vehicles/1"))
+    96	                .andExpect(jsonPath("$.id").value(1));
+    97	    }
+    98	
+    99	    @Test
+   100	    void createReturnsBadRequestProblemWithFieldErrorsWhenRequestIsInvalid() throws Exception {
+   101	        mockMvc.perform(post("/api/vehicles").contentType(MediaType.APPLICATION_JSON).content(invalidBody()))
+   102	                .andExpect(status().isBadRequest())
+   103	                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+   104	                .andExpect(jsonPath("$.status").value(400))
+   105	                .andExpect(jsonPath("$.detail").value("Validation failed"))
+   106	                .andExpect(jsonPath("$.errors.length()").value(3))
+   107	                .andExpect(jsonPath("$.errors[0].field").value("make"))
+   108	                .andExpect(jsonPath("$.errors[0].message").value("must not be blank"))
+   109	                .andExpect(jsonPath("$.errors[1].field").value("productionYear"))
+   110	                .andExpect(jsonPath("$.errors[1].message").value("must be between 1990 and next year"))
+   111	                .andExpect(jsonPath("$.errors[2].field").value("vin"));
+   112	        verifyNoInteractions(vehicleService);
+   113	    }
+   114	
+   115	    @Test
+   116	    void createReturnsEnglishValidationMessagesWhenAcceptLanguageIsPolish() throws Exception {
+   117	        String body = VALID_BODY.replace("Volkswagen", " ");
+   118	
+   119	        mockMvc.perform(post("/api/vehicles")
+   120	                        .header(HttpHeaders.ACCEPT_LANGUAGE, "pl")
+   121	                        .contentType(MediaType.APPLICATION_JSON)
+   122	                        .content(body))
+   123	                .andExpect(status().isBadRequest())
+   124	                .andExpect(jsonPath("$.errors.length()").value(1))
+   125	                .andExpect(jsonPath("$.errors[0].field").value("make"))
+   126	                .andExpect(jsonPath("$.errors[0].message").value("must not be blank"));
+   127	        verifyNoInteractions(vehicleService);
+   128	    }
+   129	
+   130	    @Test
+   131	    void createReturnsBadRequestProblemWithFieldErrorWhenFuelTypeIsUnknown() throws Exception {
+   132	        String body = VALID_BODY.replace("PETROL", "STEAM");
+   133	
+   134	        mockMvc.perform(post("/api/vehicles").contentType(MediaType.APPLICATION_JSON).content(body))
+   135	                .andExpect(status().isBadRequest())
+   136	                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+   137	                .andExpect(jsonPath("$.detail").value("Validation failed"))
+   138	                .andExpect(jsonPath("$.errors.length()").value(1))
+   139	                .andExpect(jsonPath("$.errors[0].field").value("fuelType"))
+   140	                .andExpect(jsonPath("$.errors[0].message").value("must be one of: PETROL, DIESEL, HYBRID, ELECTRIC"));
+   141	        verifyNoInteractions(vehicleService);
+   142	    }
+   143	
+   144	    @Test
+   145	    void createReturnsBadRequestProblemWithFieldErrorWhenValueHasWrongType() throws Exception {
+   146	        String body = VALID_BODY.replace("2025", "\"last year\"");
+   147	
+   148	        mockMvc.perform(post("/api/vehicles").contentType(MediaType.APPLICATION_JSON).content(body))
+   149	                .andExpect(status().isBadRequest())
+   150	                .andExpect(jsonPath("$.errors.length()").value(1))
+   151	                .andExpect(jsonPath("$.errors[0].field").value("productionYear"))
+   152	                .andExpect(jsonPath("$.errors[0].message").value("has an invalid value"));
+   153	        verifyNoInteractions(vehicleService);
+   154	    }
+   155	
+   156	    @Test
+   157	    void createReturnsBadRequestProblemWhenBodyIsNotJson() throws Exception {
+   158	        mockMvc.perform(post("/api/vehicles").contentType(MediaType.APPLICATION_JSON).content("{ not json"))
+   159	                .andExpect(status().isBadRequest())
+   160	                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+   161	                .andExpect(jsonPath("$.detail").value("Validation failed"))
+   162	                .andExpect(jsonPath("$.errors.length()").value(1))
+   163	                .andExpect(jsonPath("$.errors[0].field").value(nullValue()))
+   164	                .andExpect(jsonPath("$.errors[0].message").value("request body must be valid JSON"));
+   165	        verifyNoInteractions(vehicleService);
+   166	    }
+   167	
+   168	    @Test
+   169	    void createReturnsConflictProblemWhenVinAlreadyExists() throws Exception {
+   170	        when(vehicleService.create(any(VehicleRequest.class)))
+   171	                .thenThrow(new ConflictException("Vehicle with VIN " + VIN + " already exists"));
+   172	
+   173	        mockMvc.perform(post("/api/vehicles").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+   174	                .andExpect(status().isConflict())
+   175	                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+   176	                .andExpect(jsonPath("$.status").value(409))
+   177	                .andExpect(jsonPath("$.detail").value("Vehicle with VIN " + VIN + " already exists"));
+   178	    }
+   179	
+   180	    @Test
+   181	    void createReturnsConflictProblemWhenDatabaseConstraintIsViolated() throws Exception {
+   182	        when(vehicleService.create(any(VehicleRequest.class)))
+   183	                .thenThrow(new DataIntegrityViolationException("uq_vehicle_vin"));
+   184	
+   185	        mockMvc.perform(post("/api/vehicles").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+   186	                .andExpect(status().isConflict())
+   187	                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+   188	                .andExpect(jsonPath("$.status").value(409))
+   189	                .andExpect(jsonPath("$.detail").value("Request conflicts with existing data"));
+   190	    }
+   191	
+   192	    @Test
+   193	    void updateReturnsUpdatedVehicle() throws Exception {
+   194	        when(vehicleService.update(eq(1L), any(VehicleRequest.class))).thenReturn(response());
+   195	
+   196	        mockMvc.perform(put("/api/vehicles/1").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+   197	                .andExpect(status().isOk())
+   198	                .andExpect(jsonPath("$.vin").value(VIN));
+   199	    }
+   200	
+   201	    @Test
+   202	    void updateReturnsNotFoundProblemWhenVehicleDoesNotExist() throws Exception {
+   203	        when(vehicleService.update(eq(99L), any(VehicleRequest.class)))
+   204	                .thenThrow(new NotFoundException("Vehicle with id 99 not found"));
+   205	
+   206	        mockMvc.perform(put("/api/vehicles/99").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+   207	                .andExpect(status().isNotFound())
+   208	                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+   209	                .andExpect(jsonPath("$.status").value(404))
+   210	                .andExpect(jsonPath("$.detail").value("Vehicle with id 99 not found"));
+   211	    }
+   212	
+   213	    @Test
+   214	    void updateReturnsBadRequestProblemWithFieldErrorsWhenRequestIsInvalid() throws Exception {
+   215	        mockMvc.perform(put("/api/vehicles/1").contentType(MediaType.APPLICATION_JSON).content(invalidBody()))
+   216	                .andExpect(status().isBadRequest())
+   217	                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+   218	                .andExpect(jsonPath("$.status").value(400))
+   219	                .andExpect(jsonPath("$.detail").value("Validation failed"))
+   220	                .andExpect(jsonPath("$.errors.length()").value(3))
+   221	                .andExpect(jsonPath("$.errors[0].field").value("make"))
+   222	                .andExpect(jsonPath("$.errors[1].field").value("productionYear"))
+   223	                .andExpect(jsonPath("$.errors[2].field").value("vin"));
+   224	        verifyNoInteractions(vehicleService);
+   225	    }
+   226	
+   227	    @Test
+   228	    void updateReturnsConflictProblemWhenVinAlreadyExists() throws Exception {
+   229	        when(vehicleService.update(eq(1L), any(VehicleRequest.class)))
+   230	                .thenThrow(new ConflictException("Vehicle with VIN " + VIN + " already exists"));
+   231	
+   232	        mockMvc.perform(put("/api/vehicles/1").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+   233	                .andExpect(status().isConflict())
+   234	                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+   235	                .andExpect(jsonPath("$.status").value(409))
+   236	                .andExpect(jsonPath("$.detail").value("Vehicle with VIN " + VIN + " already exists"));
+   237	    }
+   238	
+   239	    @Test
+   240	    void deleteReturnsNoContent() throws Exception {
+   241	        mockMvc.perform(delete("/api/vehicles/1"))
+   242	                .andExpect(status().isNoContent());
+   243	
+   244	        verify(vehicleService).delete(1L);
+   245	    }
+   246	
+   247	    @Test
+   248	    void deleteReturnsNotFoundProblemWhenVehicleDoesNotExist() throws Exception {
+   249	        doThrow(new NotFoundException("Vehicle with id 99 not found")).when(vehicleService).delete(99L);
+   250	
+   251	        mockMvc.perform(delete("/api/vehicles/99"))
+   252	                .andExpect(status().isNotFound())
+   253	                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+   254	                .andExpect(jsonPath("$.status").value(404))
+   255	                .andExpect(jsonPath("$.detail").value("Vehicle with id 99 not found"));
+   256	    }
+   257	
+   258	    private static String invalidBody() {
+   259	        return """
+   260	                {
+   261	                  "vin": "TOO-SHORT",
+   262	                  "make": "",
+   263	                  "model": "Golf",
+   264	                  "productionYear": %d,
+   265	                  "fuelType": "PETROL"
+   266	                }
+   267	                """.formatted(Year.now().getValue() + 2);
+   268	    }
+   269	
+   270	    private static VehicleResponse response() {
+   271	        return new VehicleResponse(
+   272	                1L, VIN, "Volkswagen", "Golf", 2025, FuelType.PETROL, LocalDate.of(2026, 12, 15));
+   273	    }
+   274	}
+=== backend/src/test/java/com/example/dealership/vehicle/VehicleRepositoryTest.java
+     1	package com.example.dealership.vehicle;
+     2	
+     3	import static org.assertj.core.api.Assertions.assertThat;
+     4	
+     5	import java.time.LocalDate;
+     6	
+     7	import org.junit.jupiter.api.Test;
+     8	import org.springframework.beans.factory.annotation.Autowired;
+     9	import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+    10	import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+    11	
+    12	@DataJpaTest
+    13	class VehicleRepositoryTest {
+    14	
+    15	    private static final String VIN = "WF0XXXGCDX0000004";
+    16	    private static final String OTHER_VIN = "WF0XXXGCDX0000005";
+    17	
+    18	    @Autowired
+    19	    private VehicleRepository vehicleRepository;
+    20	
+    21	    @Autowired
+    22	    private TestEntityManager entityManager;
+    23	
+    24	    @Test
+    25	    void existsByVinAndIdNotFindsVinOfAnotherVehicle() {
+    26	        Vehicle first = vehicleRepository.save(
+    27	                new Vehicle(VIN, "Ford", "Focus", 2026, FuelType.ELECTRIC, null));
+    28	        Vehicle second = vehicleRepository.save(
+    29	                new Vehicle(OTHER_VIN, "Ford", "Puma", 2025, FuelType.HYBRID, null));
+    30	        entityManager.flush();
+    31	
+    32	        assertThat(vehicleRepository.existsByVinAndIdNot(VIN, second.getId())).isTrue();
+    33	        assertThat(vehicleRepository.existsByVinAndIdNot(VIN, first.getId())).isFalse();
+    34	        assertThat(vehicleRepository.existsByVin("WF0XXXGCDX0000006")).isFalse();
+    35	    }
+    36	
+    37	    @Test
+    38	    void saveStoresVehicleThatCanBeReadBack() {
+    39	        Vehicle saved = vehicleRepository.save(
+    40	                new Vehicle(VIN, "Ford", "Focus", 2026, FuelType.ELECTRIC, LocalDate.of(2027, 3, 1)));
+    41	        entityManager.flush();
+    42	        entityManager.clear();
+    43	
+    44	        Vehicle found = vehicleRepository.findById(saved.getId()).orElseThrow();
+    45	
+    46	        assertThat(found).isNotSameAs(saved);
+    47	        assertThat(found.getVin()).isEqualTo(VIN);
+    48	        assertThat(found.getMake()).isEqualTo("Ford");
+    49	        assertThat(found.getModel()).isEqualTo("Focus");
+    50	        assertThat(found.getProductionYear()).isEqualTo(2026);
+    51	        assertThat(found.getFuelType()).isEqualTo(FuelType.ELECTRIC);
+    52	        assertThat(found.getPlannedHandoverDate()).isEqualTo(LocalDate.of(2027, 3, 1));
+    53	        assertThat(vehicleRepository.existsByVin(VIN)).isTrue();
+    54	        assertThat(vehicleRepository.existsByVinAndIdNot(VIN, saved.getId())).isFalse();
+    55	    }
+    56	}
+=== backend/src/test/java/com/example/dealership/vehicle/VehicleServiceTest.java
+     1	package com.example.dealership.vehicle;
+     2	
+     3	import static org.assertj.core.api.Assertions.assertThat;
+     4	import static org.assertj.core.api.Assertions.assertThatThrownBy;
+     5	import static org.mockito.ArgumentMatchers.any;
+     6	import static org.mockito.Mockito.never;
+     7	import static org.mockito.Mockito.verify;
+     8	import static org.mockito.Mockito.when;
+     9	
+    10	import java.time.LocalDate;
+    11	import java.util.List;
+    12	import java.util.Optional;
+    13	
+    14	import com.example.dealership.error.ConflictException;
+    15	import com.example.dealership.error.NotFoundException;
+    16	
+    17	import org.junit.jupiter.api.Test;
+    18	import org.junit.jupiter.api.extension.ExtendWith;
+    19	import org.mockito.InjectMocks;
+    20	import org.mockito.Mock;
+    21	import org.mockito.junit.jupiter.MockitoExtension;
+    22	import org.springframework.data.domain.Sort;
+    23	
+    24	@ExtendWith(MockitoExtension.class)
+    25	class VehicleServiceTest {
+    26	
+    27	    private static final String VIN = "WVWZZZ1KZAW000001";
+    28	    private static final String OTHER_VIN = "WAUZZZ8V5KA000002";
+    29	
+    30	    @Mock
+    31	    private VehicleRepository vehicleRepository;
+    32	
+    33	    @InjectMocks
+    34	    private VehicleService vehicleService;
+    35	
+    36	    @Test
+    37	    void findAllReturnsMappedVehicles() {
+    38	        when(vehicleRepository.findAll(Sort.by("id"))).thenReturn(List.of(vehicle(VIN), vehicle(OTHER_VIN)));
+    39	
+    40	        List<VehicleResponse> responses = vehicleService.findAll();
+    41	
+    42	        assertThat(responses).extracting(VehicleResponse::vin).containsExactly(VIN, OTHER_VIN);
+    43	    }
+    44	
+    45	    @Test
+    46	    void findByIdThrowsNotFoundWhenVehicleDoesNotExist() {
+    47	        when(vehicleRepository.findById(99L)).thenReturn(Optional.empty());
+    48	
+    49	        assertThatThrownBy(() -> vehicleService.findById(99L))
+    50	                .isInstanceOf(NotFoundException.class)
+    51	                .hasMessage("Vehicle with id 99 not found");
+    52	    }
+    53	
+    54	    @Test
+    55	    void createSavesVehicle() {
+    56	        when(vehicleRepository.existsByVin(VIN)).thenReturn(false);
+    57	        when(vehicleRepository.save(any(Vehicle.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    58	
+    59	        VehicleResponse response = vehicleService.create(request(VIN));
+    60	
+    61	        assertThat(response.vin()).isEqualTo(VIN);
+    62	        assertThat(response.make()).isEqualTo("Volkswagen");
+    63	        assertThat(response.fuelType()).isEqualTo(FuelType.PETROL);
+    64	        assertThat(response.plannedHandoverDate()).isEqualTo(LocalDate.of(2026, 12, 15));
+    65	    }
+    66	
+    67	    @Test
+    68	    void createThrowsConflictWhenVinAlreadyExists() {
+    69	        when(vehicleRepository.existsByVin(VIN)).thenReturn(true);
+    70	
+    71	        assertThatThrownBy(() -> vehicleService.create(request(VIN)))
+    72	                .isInstanceOf(ConflictException.class)
+    73	                .hasMessage("Vehicle with VIN " + VIN + " already exists");
+    74	        verify(vehicleRepository, never()).save(any());
+    75	    }
+    76	
+    77	    @Test
+    78	    void updateChangesExistingVehicle() {
+    79	        Vehicle vehicle = vehicle(VIN);
+    80	        when(vehicleRepository.findById(1L)).thenReturn(Optional.of(vehicle));
+    81	        when(vehicleRepository.existsByVinAndIdNot(OTHER_VIN, 1L)).thenReturn(false);
+    82	        when(vehicleRepository.save(vehicle)).thenReturn(vehicle);
+    83	
+    84	        VehicleResponse response = vehicleService.update(1L, request(OTHER_VIN));
+    85	
+    86	        assertThat(response.vin()).isEqualTo(OTHER_VIN);
+    87	        assertThat(vehicle.getVin()).isEqualTo(OTHER_VIN);
+    88	        verify(vehicleRepository).save(vehicle);
+    89	    }
+    90	
+    91	    @Test
+    92	    void updateThrowsConflictWhenVinBelongsToAnotherVehicle() {
+    93	        when(vehicleRepository.findById(1L)).thenReturn(Optional.of(vehicle(VIN)));
+    94	        when(vehicleRepository.existsByVinAndIdNot(OTHER_VIN, 1L)).thenReturn(true);
+    95	
+    96	        assertThatThrownBy(() -> vehicleService.update(1L, request(OTHER_VIN)))
+    97	                .isInstanceOf(ConflictException.class)
+    98	                .hasMessage("Vehicle with VIN " + OTHER_VIN + " already exists");
+    99	        verify(vehicleRepository, never()).save(any());
+   100	    }
+   101	
+   102	    @Test
+   103	    void updateThrowsNotFoundWhenVehicleDoesNotExist() {
+   104	        when(vehicleRepository.findById(99L)).thenReturn(Optional.empty());
+   105	
+   106	        assertThatThrownBy(() -> vehicleService.update(99L, request(VIN)))
+   107	                .isInstanceOf(NotFoundException.class)
+   108	                .hasMessage("Vehicle with id 99 not found");
+   109	    }
+   110	
+   111	    @Test
+   112	    void deleteRemovesExistingVehicle() {
+   113	        Vehicle vehicle = vehicle(VIN);
+   114	        when(vehicleRepository.findById(1L)).thenReturn(Optional.of(vehicle));
+   115	
+   116	        vehicleService.delete(1L);
+   117	
+   118	        verify(vehicleRepository).delete(vehicle);
+   119	    }
+   120	
+   121	    @Test
+   122	    void deleteThrowsNotFoundWhenVehicleDoesNotExist() {
+   123	        when(vehicleRepository.findById(99L)).thenReturn(Optional.empty());
+   124	
+   125	        assertThatThrownBy(() -> vehicleService.delete(99L))
+   126	                .isInstanceOf(NotFoundException.class)
+   127	                .hasMessage("Vehicle with id 99 not found");
+   128	    }
+   129	
+   130	    private static Vehicle vehicle(String vin) {
+   131	        return new Vehicle(vin, "Volkswagen", "Golf", 2025, FuelType.PETROL, LocalDate.of(2026, 12, 15));
+   132	    }
+   133	
+   134	    private static VehicleRequest request(String vin) {
+   135	        return new VehicleRequest(vin, "Volkswagen", "Golf", 2025, FuelType.PETROL, LocalDate.of(2026, 12, 15));
+   136	    }
+   137	}
+=== frontend/src/app/app.config.ts
+     1	import { provideHttpClient } from '@angular/common/http';
+     2	import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
+     3	import { provideRouter, withComponentInputBinding } from '@angular/router';
+     4	import { routes } from './app.routes';
+     5	
+     6	export const appConfig: ApplicationConfig = {
+     7	  providers: [
+     8	    provideBrowserGlobalErrorListeners(),
+     9	    provideHttpClient(),
+    10	    provideRouter(routes, withComponentInputBinding()),
+    11	  ],
+    12	};
+=== frontend/src/app/app.routes.ts
+     1	import { Routes } from '@angular/router';
+     2	
+     3	export const routes: Routes = [
+     4	  { path: '', pathMatch: 'full', redirectTo: 'vehicles' },
+     5	  {
+     6	    path: 'vehicles',
+     7	    loadChildren: () => import('./vehicles/vehicles.routes').then((m) => m.vehiclesRoutes),
+     8	  },
+     9	];
+=== frontend/src/app/app.ts
+     1	import { Component } from '@angular/core';
+     2	import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+     3	
+     4	@Component({
+     5	  selector: 'app-root',
+     6	  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+     7	  templateUrl: './app.html',
+     8	})
+     9	export class App {}
+=== frontend/src/app/shared/problem-detail.ts
+     1	import { HttpErrorResponse } from '@angular/common/http';
+     2	import { FieldTree, ValidationError } from '@angular/forms/signals';
+     3	
+     4	export interface ProblemDetail {
+     5	  status: number;
+     6	  title: string;
+     7	  detail?: string;
+     8	  errors?: ProblemFieldError[];
+     9	}
+    10	
+    11	export interface ProblemFieldError {
+    12	  field: string | null;
+    13	  message: string;
+    14	}
+    15	
+    16	export function problemDetailMessage(error: unknown): string {
+    17	  if (error instanceof HttpErrorResponse) {
+    18	    const problem = error.error as ProblemDetail | null;
+    19	    return problem?.detail ?? problem?.title ?? error.message;
+    20	  }
+    21	  return 'Unexpected error';
+    22	}
+    23	
+    24	export function loadErrorMessage(error: unknown, notFoundMessage: string): string {
+    25	  if (error instanceof HttpErrorResponse && error.status === 404) {
+    26	    return notFoundMessage;
+    27	  }
+    28	  return problemDetailMessage(error);
+    29	}
+    30	
+    31	export function problemDetailToFormErrors<T extends object>(
+    32	  error: unknown,
+    33	  form: FieldTree<T>,
+    34	): ValidationError.WithOptionalFieldTree[] {
+    35	  const fieldErrors =
+    36	    error instanceof HttpErrorResponse ? (error.error as ProblemDetail | null)?.errors : undefined;
+    37	  if (!fieldErrors?.length) {
+    38	    // A 409 conflict carries no field errors: it is an error of the whole form, not of a field.
+    39	    return [{ kind: 'server', message: problemDetailMessage(error), fieldTree: form }];
+    40	  }
+    41	  const fields = form as unknown as Record<string, FieldTree<unknown> | undefined>;
+    42	  return fieldErrors.map(({ field, message }) => ({
+    43	    kind: 'server',
+    44	    message,
+    45	    fieldTree: (field === null ? undefined : fields[field]) ?? form,
+    46	  }));
+    47	}
+=== frontend/src/app/shared/route-params.ts
+     1	import { numberAttribute } from '@angular/core';
+     2	
+     3	export function optionalNumberAttribute(value: string | undefined): number | undefined {
+     4	  return value === undefined ? undefined : numberAttribute(value);
+     5	}
+=== frontend/src/app/vehicles/vehicle-api.ts
+     1	import { HttpClient, httpResource } from '@angular/common/http';
+     2	import { Injectable, Signal, inject } from '@angular/core';
+     3	import { Observable } from 'rxjs';
+     4	
+     5	export type FuelType = 'PETROL' | 'DIESEL' | 'HYBRID' | 'ELECTRIC';
+     6	
+     7	export const FUEL_TYPE_LABELS: Record<FuelType, string> = {
+     8	  PETROL: 'Petrol',
+     9	  DIESEL: 'Diesel',
+    10	  HYBRID: 'Hybrid',
+    11	  ELECTRIC: 'Electric',
+    12	};
+    13	
+    14	export const FUEL_TYPES = Object.keys(FUEL_TYPE_LABELS) as FuelType[];
+    15	
+    16	export interface Vehicle {
+    17	  id: number;
+    18	  vin: string;
+    19	  make: string;
+    20	  model: string;
+    21	  productionYear: number;
+    22	  fuelType: FuelType;
+    23	  plannedHandoverDate: string | null;
+    24	}
+    25	
+    26	export type VehicleRequest = Omit<Vehicle, 'id'>;
+    27	
+    28	@Injectable({ providedIn: 'root' })
+    29	export class VehicleApi {
+    30	  private readonly http = inject(HttpClient);
+    31	  private readonly url = '/api/vehicles';
+    32	
+    33	  list() {
+    34	    return httpResource<Vehicle[]>(() => this.url, { defaultValue: [] });
+    35	  }
+    36	
+    37	  get(id: Signal<number | undefined>) {
+    38	    return httpResource<Vehicle>(() => {
+    39	      const vehicleId = id();
+    40	      return vehicleId === undefined ? undefined : `${this.url}/${vehicleId}`;
+    41	    });
+    42	  }
+    43	
+    44	  create(request: VehicleRequest): Observable<Vehicle> {
+    45	    return this.http.post<Vehicle>(this.url, request);
+    46	  }
+    47	
+    48	  update(id: number, request: VehicleRequest): Observable<Vehicle> {
+    49	    return this.http.put<Vehicle>(`${this.url}/${id}`, request);
+    50	  }
+    51	
+    52	  delete(id: number): Observable<void> {
+    53	    return this.http.delete<void>(`${this.url}/${id}`);
+    54	  }
+    55	}
+=== frontend/src/app/vehicles/vehicle-detail.html
+     1	<p><a routerLink="/vehicles">Back to vehicles</a></p>
+     2	
+     3	@if (vehicle.isLoading()) {
+     4	  <p>Loading…</p>
+     5	} @else if (vehicle.error(); as error) {
+     6	  <p class="error" role="alert">{{ loadError(error) }}</p>
+     7	} @else if (vehicle.value(); as vehicle) {
+     8	  <h1>{{ vehicle.make }} {{ vehicle.model }}</h1>
+     9	
+    10	  <dl>
+    11	    <dt>VIN</dt>
+    12	    <dd>{{ vehicle.vin }}</dd>
+    13	    <dt>Production year</dt>
+    14	    <dd>{{ vehicle.productionYear }}</dd>
+    15	    <dt>Fuel type</dt>
+    16	    <dd>{{ fuelTypeLabels[vehicle.fuelType] }}</dd>
+    17	    <dt>Planned handover</dt>
+    18	    <dd>{{ vehicle.plannedHandoverDate ?? '—' }}</dd>
+    19	  </dl>
+    20	
+    21	  <p><a [routerLink]="['/vehicles', vehicle.id, 'edit']">Edit</a></p>
+    22	
+    23	  <section>
+    24	    <h2>Documents</h2>
+    25	  </section>
+    26	}
+=== frontend/src/app/vehicles/vehicle-detail.ts
+     1	import { Component, inject, input, numberAttribute } from '@angular/core';
+     2	import { RouterLink } from '@angular/router';
+     3	import { loadErrorMessage } from '../shared/problem-detail';
+     4	import { FUEL_TYPE_LABELS, VehicleApi } from './vehicle-api';
+     5	
+     6	@Component({
+     7	  selector: 'app-vehicle-detail',
+     8	  imports: [RouterLink],
+     9	  templateUrl: './vehicle-detail.html',
+    10	})
+    11	export class VehicleDetail {
+    12	  private readonly vehicleApi = inject(VehicleApi);
+    13	
+    14	  readonly id = input.required({ transform: numberAttribute });
+    15	
+    16	  protected readonly vehicle = this.vehicleApi.get(this.id);
+    17	  protected readonly fuelTypeLabels = FUEL_TYPE_LABELS;
+    18	
+    19	  protected loadError(error: unknown): string {
+    20	    return loadErrorMessage(error, 'Vehicle not found');
+    21	  }
+    22	}
+=== frontend/src/app/vehicles/vehicle-form.html
+     1	<h1>{{ isEdit() ? 'Edit vehicle' : 'New vehicle' }}</h1>
+     2	
+     3	@if (vehicle.isLoading()) {
+     4	  <p>Loading…</p>
+     5	} @else if (vehicle.error(); as error) {
+     6	  <p class="error" role="alert">{{ loadError(error) }}</p>
+     7	} @else if (!isEdit() || vehicle.hasValue()) {
+     8	  <form [formRoot]="vehicleForm">
+     9	    @for (error of vehicleForm().errors(); track error) {
+    10	      <p class="error" role="alert">{{ error.message }}</p>
+    11	    }
+    12	
+    13	    <label>
+    14	      VIN
+    15	      <input type="text" [formField]="vehicleForm.vin" />
+    16	    </label>
+    17	    @if (vehicleForm.vin().touched()) {
+    18	      @for (error of vehicleForm.vin().errors(); track error) {
+    19	        <p class="error" role="alert">{{ error.message }}</p>
+    20	      }
+    21	    }
+    22	
+    23	    <label>
+    24	      Make
+    25	      <input type="text" [formField]="vehicleForm.make" />
+    26	    </label>
+    27	    @if (vehicleForm.make().touched()) {
+    28	      @for (error of vehicleForm.make().errors(); track error) {
+    29	        <p class="error" role="alert">{{ error.message }}</p>
+    30	      }
+    31	    }
+    32	
+    33	    <label>
+    34	      Model
+    35	      <input type="text" [formField]="vehicleForm.model" />
+    36	    </label>
+    37	    @if (vehicleForm.model().touched()) {
+    38	      @for (error of vehicleForm.model().errors(); track error) {
+    39	        <p class="error" role="alert">{{ error.message }}</p>
+    40	      }
+    41	    }
+    42	
+    43	    <label>
+    44	      Production year
+    45	      <input type="number" [formField]="vehicleForm.productionYear" />
+    46	    </label>
+    47	    @if (vehicleForm.productionYear().touched()) {
+    48	      @for (error of vehicleForm.productionYear().errors(); track error) {
+    49	        <p class="error" role="alert">{{ error.message }}</p>
+    50	      }
+    51	    }
+    52	
+    53	    <label>
+    54	      Fuel type
+    55	      <select [formField]="vehicleForm.fuelType">
+    56	        <option value="">Select fuel type</option>
+    57	        @for (fuelType of fuelTypes; track fuelType) {
+    58	          <option [value]="fuelType">{{ fuelTypeLabels[fuelType] }}</option>
+    59	        }
+    60	      </select>
+    61	    </label>
+    62	    @if (vehicleForm.fuelType().touched()) {
+    63	      @for (error of vehicleForm.fuelType().errors(); track error) {
+    64	        <p class="error" role="alert">{{ error.message }}</p>
+    65	      }
+    66	    }
+    67	
+    68	    <label>
+    69	      Planned handover date
+    70	      <input type="date" [formField]="vehicleForm.plannedHandoverDate" />
+    71	    </label>
+    72	    @if (vehicleForm.plannedHandoverDate().touched()) {
+    73	      @for (error of vehicleForm.plannedHandoverDate().errors(); track error) {
+    74	        <p class="error" role="alert">{{ error.message }}</p>
+    75	      }
+    76	    }
+    77	
+    78	    <button type="submit" [disabled]="vehicleForm().submitting()">Save</button>
+    79	    <a [routerLink]="isEdit() ? ['/vehicles', id()] : ['/vehicles']">Cancel</a>
+    80	  </form>
+    81	}
+=== frontend/src/app/vehicles/vehicle-form.spec.ts
+     1	import { provideHttpClient } from '@angular/common/http';
+     2	import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+     3	import { ComponentFixture, TestBed } from '@angular/core/testing';
+     4	import { Router, provideRouter } from '@angular/router';
+     5	import { VehicleForm } from './vehicle-form';
+     6	
+     7	describe('VehicleForm', () => {
+     8	  let fixture: ComponentFixture<VehicleForm>;
+     9	  let element: HTMLElement;
+    10	  let http: HttpTestingController;
+    11	
+    12	  beforeEach(async () => {
+    13	    TestBed.configureTestingModule({
+    14	      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    15	    });
+    16	    fixture = TestBed.createComponent(VehicleForm);
+    17	    element = fixture.nativeElement;
+    18	    http = TestBed.inject(HttpTestingController);
+    19	    await fixture.whenStable();
+    20	  });
+    21	
+    22	  afterEach(() => http.verify());
+    23	
+    24	  function fill(type: string, index: number, value: string): void {
+    25	    const input = element.querySelectorAll<HTMLInputElement>(`input[type="${type}"]`)[index];
+    26	    input.value = value;
+    27	    input.dispatchEvent(new Event('input'));
+    28	  }
+    29	
+    30	  function select(value: string): void {
+    31	    const select = element.querySelector('select')!;
+    32	    select.value = value;
+    33	    select.dispatchEvent(new Event('input'));
+    34	  }
+    35	
+    36	  function fillValidVehicle(): void {
+    37	    fill('text', 0, 'WVWZZZ1KZAW000001');
+    38	    fill('text', 1, 'Volkswagen');
+    39	    fill('text', 2, 'Golf');
+    40	    fill('number', 0, '2025');
+    41	    select('PETROL');
+    42	  }
+    43	
+    44	  async function submit(): Promise<void> {
+    45	    element.querySelector('form')!.dispatchEvent(new Event('submit'));
+    46	    await fixture.whenStable();
+    47	  }
+    48	
+    49	  function errors(): string[] {
+    50	    return Array.from(element.querySelectorAll('.error'), (error) => error.textContent!.trim());
+    51	  }
+    52	
+    53	  it('shows required errors and sends nothing when the form is empty', async () => {
+    54	    await submit();
+    55	
+    56	    http.expectNone('/api/vehicles');
+    57	    expect(errors()).toEqual([
+    58	      'VIN is required',
+    59	      'Make is required',
+    60	      'Model is required',
+    61	      'Production year is required',
+    62	      'Fuel type is required',
+    63	    ]);
+    64	  });
+    65	
+    66	  it('leaves format and range rules to the backend', async () => {
+    67	    fillValidVehicle();
+    68	    fill('text', 0, 'TOO-SHORT');
+    69	    fill('number', 0, '1800');
+    70	
+    71	    await submit();
+    72	
+    73	    const request = http.expectOne({ method: 'POST', url: '/api/vehicles' });
+    74	    expect(request.request.body.vin).toBe('TOO-SHORT');
+    75	    expect(request.request.body.productionYear).toBe(1800);
+    76	    request.flush(
+    77	      {
+    78	        title: 'Bad Request',
+    79	        status: 400,
+    80	        detail: 'Validation failed',
+    81	        errors: [
+    82	          { field: 'productionYear', message: 'must be between 1990 and next year' },
+    83	          {
+    84	            field: 'vin',
+    85	            message: 'must be 17 characters: digits and capital letters except I, O, Q',
+    86	          },
+    87	        ],
+    88	      },
+    89	      { status: 400, statusText: 'Bad Request' },
+    90	    );
+    91	
+    92	    await vi.waitFor(() =>
+    93	      expect(errors()).toEqual([
+    94	        'must be 17 characters: digits and capital letters except I, O, Q',
+    95	        'must be between 1990 and next year',
+    96	      ]),
+    97	    );
+    98	  });
+    99	
+   100	  it('creates the vehicle and navigates to its details', async () => {
+   101	    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+   102	    fillValidVehicle();
+   103	    fill('date', 0, '2026-12-15');
+   104	
+   105	    await submit();
+   106	    const request = http.expectOne({ method: 'POST', url: '/api/vehicles' });
+   107	    expect(request.request.body).toEqual({
+   108	      vin: 'WVWZZZ1KZAW000001',
+   109	      make: 'Volkswagen',
+   110	      model: 'Golf',
+   111	      productionYear: 2025,
+   112	      fuelType: 'PETROL',
+   113	      plannedHandoverDate: '2026-12-15',
+   114	    });
+   115	    request.flush({ id: 7, ...request.request.body });
+   116	
+   117	    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(['/vehicles', 7]));
+   118	  });
+   119	
+   120	  it('loads the vehicle in edit mode and updates it', async () => {
+   121	    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+   122	    const vehicle = {
+   123	      id: 3,
+   124	      vin: 'TMBJJ7NE8L0000003',
+   125	      make: 'Skoda',
+   126	      model: 'Octavia',
+   127	      productionYear: 2026,
+   128	      fuelType: 'HYBRID',
+   129	      plannedHandoverDate: null,
+   130	    };
+   131	    fixture.componentRef.setInput('id', '3');
+   132	    fixture.detectChanges();
+   133	    http.expectOne({ method: 'GET', url: '/api/vehicles/3' }).flush(vehicle);
+   134	    await fixture.whenStable();
+   135	    fill('text', 2, 'Superb');
+   136	
+   137	    await submit();
+   138	    const request = http.expectOne({ method: 'PUT', url: '/api/vehicles/3' });
+   139	    expect(request.request.body).toEqual({
+   140	      vin: 'TMBJJ7NE8L0000003',
+   141	      make: 'Skoda',
+   142	      model: 'Superb',
+   143	      productionYear: 2026,
+   144	      fuelType: 'HYBRID',
+   145	      plannedHandoverDate: null,
+   146	    });
+   147	    request.flush({ ...vehicle, model: 'Superb' });
+   148	
+   149	    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(['/vehicles', 3]));
+   150	  });
+   151	
+   152	  it('shows a dedicated message when the vehicle to edit does not exist', async () => {
+   153	    fixture.componentRef.setInput('id', '99');
+   154	    fixture.detectChanges();
+   155	    http
+   156	      .expectOne({ method: 'GET', url: '/api/vehicles/99' })
+   157	      .flush(
+   158	        { title: 'Not Found', status: 404, detail: 'Vehicle with id 99 not found' },
+   159	        { status: 404, statusText: 'Not Found' },
+   160	      );
+   161	
+   162	    await vi.waitFor(() => expect(errors()).toEqual(['Vehicle not found']));
+   163	  });
+   164	
+   165	  it('shows the ProblemDetail detail when loading the vehicle fails', async () => {
+   166	    fixture.componentRef.setInput('id', '3');
+   167	    fixture.detectChanges();
+   168	    http
+   169	      .expectOne({ method: 'GET', url: '/api/vehicles/3' })
+   170	      .flush(
+   171	        { title: 'Service Unavailable', status: 503, detail: 'Database is unavailable' },
+   172	        { status: 503, statusText: 'Service Unavailable' },
+   173	      );
+   174	
+   175	    await vi.waitFor(() => expect(errors()).toEqual(['Database is unavailable']));
+   176	  });
+   177	
+   178	  it('shows object-level errors returned by the backend above the form', async () => {
+   179	    fillValidVehicle();
+   180	
+   181	    await submit();
+   182	    http.expectOne({ method: 'POST', url: '/api/vehicles' }).flush(
+   183	      {
+   184	        title: 'Bad Request',
+   185	        status: 400,
+   186	        detail: 'Validation failed',
+   187	        errors: [{ field: null, message: 'request body must be valid JSON' }],
+   188	      },
+   189	      { status: 400, statusText: 'Bad Request' },
+   190	    );
+   191	
+   192	    await vi.waitFor(() => expect(errors()).toEqual(['request body must be valid JSON']));
+   193	  });
+   194	
+   195	  it('shows field errors returned by the backend as ProblemDetail', async () => {
+   196	    fillValidVehicle();
+   197	
+   198	    await submit();
+   199	    http.expectOne({ method: 'POST', url: '/api/vehicles' }).flush(
+   200	      {
+   201	        title: 'Bad Request',
+   202	        status: 400,
+   203	        detail: 'Validation failed',
+   204	        errors: [{ field: 'productionYear', message: 'must be between 1990 and next year' }],
+   205	      },
+   206	      { status: 400, statusText: 'Bad Request' },
+   207	    );
+   208	
+   209	    await vi.waitFor(() => expect(errors()).toEqual(['must be between 1990 and next year']));
+   210	  });
+   211	
+   212	  it('shows the ProblemDetail detail when the backend reports a conflict', async () => {
+   213	    fillValidVehicle();
+   214	
+   215	    await submit();
+   216	    http.expectOne({ method: 'POST', url: '/api/vehicles' }).flush(
+   217	      {
+   218	        title: 'Conflict',
+   219	        status: 409,
+   220	        detail: 'Vehicle with VIN WVWZZZ1KZAW000001 already exists',
+   221	      },
+   222	      { status: 409, statusText: 'Conflict' },
+   223	    );
+   224	
+   225	    await vi.waitFor(() =>
+   226	      expect(errors()).toEqual(['Vehicle with VIN WVWZZZ1KZAW000001 already exists']),
+   227	    );
+   228	  });
+   229	});
+=== frontend/src/app/vehicles/vehicle-form.ts
+     1	import { Component, computed, inject, input, linkedSignal } from '@angular/core';
+     2	import { FormField, FormRoot, form, required } from '@angular/forms/signals';
+     3	import { Router, RouterLink } from '@angular/router';
+     4	import { firstValueFrom } from 'rxjs';
+     5	import { loadErrorMessage, problemDetailToFormErrors } from '../shared/problem-detail';
+     6	import { optionalNumberAttribute } from '../shared/route-params';
+     7	import {
+     8	  FUEL_TYPES,
+     9	  FUEL_TYPE_LABELS,
+    10	  FuelType,
+    11	  Vehicle,
+    12	  VehicleApi,
+    13	  VehicleRequest,
+    14	} from './vehicle-api';
+    15	
+    16	interface VehicleFormModel {
+    17	  vin: string;
+    18	  make: string;
+    19	  model: string;
+    20	  productionYear: number | null;
+    21	  fuelType: FuelType | '';
+    22	  plannedHandoverDate: string;
+    23	}
+    24	
+    25	function toFormModel(vehicle: Vehicle | undefined): VehicleFormModel {
+    26	  return {
+    27	    vin: vehicle?.vin ?? '',
+    28	    make: vehicle?.make ?? '',
+    29	    model: vehicle?.model ?? '',
+    30	    productionYear: vehicle?.productionYear ?? null,
+    31	    fuelType: vehicle?.fuelType ?? '',
+    32	    plannedHandoverDate: vehicle?.plannedHandoverDate ?? '',
+    33	  };
+    34	}
+    35	
+    36	function toRequest(model: VehicleFormModel): VehicleRequest {
+    37	  return {
+    38	    vin: model.vin,
+    39	    make: model.make,
+    40	    model: model.model,
+    41	    productionYear: model.productionYear!,
+    42	    fuelType: model.fuelType as FuelType,
+    43	    plannedHandoverDate: model.plannedHandoverDate || null,
+    44	  };
+    45	}
+    46	
+    47	@Component({
+    48	  selector: 'app-vehicle-form',
+    49	  imports: [FormField, FormRoot, RouterLink],
+    50	  templateUrl: './vehicle-form.html',
+    51	})
+    52	export class VehicleForm {
+    53	  private readonly vehicleApi = inject(VehicleApi);
+    54	  private readonly router = inject(Router);
+    55	
+    56	  readonly id = input(undefined, { transform: optionalNumberAttribute });
+    57	
+    58	  protected readonly isEdit = computed(() => this.id() !== undefined);
+    59	  protected readonly vehicle = this.vehicleApi.get(this.id);
+    60	  protected readonly fuelTypes = FUEL_TYPES;
+    61	  protected readonly fuelTypeLabels = FUEL_TYPE_LABELS;
+    62	
+    63	  private readonly model = linkedSignal(() =>
+    64	    toFormModel(this.vehicle.hasValue() ? this.vehicle.value() : undefined),
+    65	  );
+    66	
+    67	  protected readonly vehicleForm = form(
+    68	    this.model,
+    69	    (path) => {
+    70	      required(path.vin, { message: 'VIN is required' });
+    71	      required(path.make, { message: 'Make is required' });
+    72	      required(path.model, { message: 'Model is required' });
+    73	      required(path.productionYear, { message: 'Production year is required' });
+    74	      required(path.fuelType, { message: 'Fuel type is required' });
+    75	    },
+    76	    {
+    77	      submission: {
+    78	        action: async (vehicleForm) => {
+    79	          const request = toRequest(vehicleForm().value());
+    80	          const id = this.id();
+    81	          try {
+    82	            const saved = await firstValueFrom(
+    83	              id === undefined
+    84	                ? this.vehicleApi.create(request)
+    85	                : this.vehicleApi.update(id, request),
+    86	            );
+    87	            await this.router.navigate(['/vehicles', saved.id]);
+    88	            return undefined;
+    89	          } catch (error) {
+    90	            return problemDetailToFormErrors(error, vehicleForm);
+    91	          }
+    92	        },
+    93	      },
+    94	    },
+    95	  );
+    96	
+    97	  protected loadError(error: unknown): string {
+    98	    return loadErrorMessage(error, 'Vehicle not found');
+    99	  }
+   100	}
+=== frontend/src/app/vehicles/vehicle-list.html
+     1	<h1>Vehicles</h1>
+     2	
+     3	<p><a routerLink="/vehicles/new">Add vehicle</a></p>
+     4	
+     5	@if (deleteError(); as message) {
+     6	  <p class="error" role="alert">{{ message }}</p>
+     7	}
+     8	
+     9	@if (vehicles.isLoading()) {
+    10	  <p>Loading…</p>
+    11	} @else if (vehicles.error(); as error) {
+    12	  <p class="error" role="alert">{{ loadError(error) }}</p>
+    13	} @else if (vehicles.value(); as vehicles) {
+    14	  <table>
+    15	    <thead>
+    16	      <tr>
+    17	        <th>VIN</th>
+    18	        <th>Make</th>
+    19	        <th>Model</th>
+    20	        <th>Production year</th>
+    21	        <th>Fuel type</th>
+    22	        <th>Planned handover</th>
+    23	        <th>Actions</th>
+    24	      </tr>
+    25	    </thead>
+    26	    <tbody>
+    27	      @for (vehicle of vehicles; track vehicle.id) {
+    28	        <tr>
+    29	          <td>
+    30	            <a [routerLink]="['/vehicles', vehicle.id]">{{ vehicle.vin }}</a>
+    31	          </td>
+    32	          <td>{{ vehicle.make }}</td>
+    33	          <td>{{ vehicle.model }}</td>
+    34	          <td>{{ vehicle.productionYear }}</td>
+    35	          <td>{{ fuelTypeLabels[vehicle.fuelType] }}</td>
+    36	          <td>{{ vehicle.plannedHandoverDate ?? '—' }}</td>
+    37	          <td>
+    38	            <a [routerLink]="['/vehicles', vehicle.id, 'edit']">Edit</a>
+    39	            <button type="button" (click)="delete(vehicle)">Delete</button>
+    40	          </td>
+    41	        </tr>
+    42	      } @empty {
+    43	        <tr>
+    44	          <td colspan="7">No vehicles yet.</td>
+    45	        </tr>
+    46	      }
+    47	    </tbody>
+    48	  </table>
+    49	}
+=== frontend/src/app/vehicles/vehicle-list.ts
+     1	import { Component, inject, signal } from '@angular/core';
+     2	import { RouterLink } from '@angular/router';
+     3	import { firstValueFrom } from 'rxjs';
+     4	import { loadErrorMessage, problemDetailMessage } from '../shared/problem-detail';
+     5	import { FUEL_TYPE_LABELS, Vehicle, VehicleApi } from './vehicle-api';
+     6	
+     7	@Component({
+     8	  selector: 'app-vehicle-list',
+     9	  imports: [RouterLink],
+    10	  templateUrl: './vehicle-list.html',
+    11	})
+    12	export class VehicleList {
+    13	  private readonly vehicleApi = inject(VehicleApi);
+    14	
+    15	  protected readonly vehicles = this.vehicleApi.list();
+    16	  protected readonly fuelTypeLabels = FUEL_TYPE_LABELS;
+    17	  protected readonly deleteError = signal<string | null>(null);
+    18	
+    19	  protected loadError(error: unknown): string {
+    20	    return loadErrorMessage(error, 'Vehicles not found');
+    21	  }
+    22	
+    23	  protected async delete(vehicle: Vehicle): Promise<void> {
+    24	    this.deleteError.set(null);
+    25	    try {
+    26	      await firstValueFrom(this.vehicleApi.delete(vehicle.id));
+    27	      this.vehicles.reload();
+    28	    } catch (error) {
+    29	      this.deleteError.set(problemDetailMessage(error));
+    30	    }
+    31	  }
+    32	}
+=== frontend/src/app/vehicles/vehicles.routes.ts
+     1	import { Routes } from '@angular/router';
+     2	import { VehicleDetail } from './vehicle-detail';
+     3	import { VehicleForm } from './vehicle-form';
+     4	import { VehicleList } from './vehicle-list';
+     5	
+     6	export const vehiclesRoutes: Routes = [
+     7	  { path: '', component: VehicleList },
+     8	  { path: 'new', component: VehicleForm },
+     9	  { path: ':id/edit', component: VehicleForm },
+    10	  { path: ':id', component: VehicleDetail },
+    11	];
+=== frontend/proxy.conf.json
+     1	{
+     2	  "/api": {
+     3	    "target": "http://localhost:8080",
+     4	    "secure": false
+     5	  }
+     6	}
+=== frontend/package.json
+     1	{
+     2	  "name": "frontend",
+     3	  "version": "0.0.0",
+     4	  "scripts": {
+     5	    "start": "ng serve",
+     6	    "build": "ng build",
+     7	    "test": "ng test --watch=false",
+     8	    "format": "prettier --write \"src/**/*.{ts,html,css}\""
+     9	  },
+    10	  "private": true,
+    11	  "packageManager": "npm@10.9.9",
+    12	  "dependencies": {
+    13	    "@angular/common": "22.2.5",
+    14	    "@angular/compiler": "22.2.5",
+    15	    "@angular/core": "22.2.5",
+    16	    "@angular/forms": "22.2.5",
+    17	    "@angular/platform-browser": "22.2.5",
+    18	    "@angular/router": "22.2.5",
+    19	    "rxjs": "7.8.2",
+    20	    "tslib": "2.9.1"
+    21	  },
+    22	  "devDependencies": {
+    23	    "@angular/build": "22.2.6",
+    24	    "@angular/cli": "22.2.6",
+    25	    "@angular/compiler-cli": "22.2.5",
+    26	    "jsdom": "30.1.3",
+    27	    "prettier": "3.9.10",
+    28	    "typescript": "6.0.3",
+    29	    "vitest": "5.1.0"
+    30	  },
+    31	  "engines": {
+    32	    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
+    33	  }
+    34	}
+=== frontend/src/styles.css
+     1	/*
+     2	 * Global, class-free styles: they target plain elements, so a new feature that follows the
+     3	 * vehicle templates (table, dl, form with labels) is styled without adding any CSS.
+     4	 */
+     5	:root {
+     6	  --text: #1f2933;
+     7	  --muted: #5b6770;
+     8	  --surface: #ffffff;
+     9	  --page: #f4f6f8;
+    10	  --border: #d5dbe1;
+    11	  --accent: #1d5fa8;
+    12	  --accent-dark: #174c86;
+    13	  --danger: #b00020;
+    14	  --danger-surface: #fdecee;
+    15	  --radius: 6px;
+    16	}
+    17	
+    18	body {
+    19	  margin: 0;
+    20	  background: var(--page);
+    21	  color: var(--text);
+    22	  font-family: system-ui, sans-serif;
+    23	  line-height: 1.5;
+    24	}
+    25	
+    26	header {
+    27	  background: var(--surface);
+    28	  border-bottom: 1px solid var(--border);
+    29	}
+    30	
+    31	nav,
+    32	main {
+    33	  box-sizing: border-box;
+    34	  max-width: 64rem;
+    35	  margin: 0 auto;
+    36	  padding: 0 1.5rem;
+    37	}
+    38	
+    39	nav {
+    40	  display: flex;
+    41	  gap: 0.25rem;
+    42	}
+    43	
+    44	nav a {
+    45	  padding: 0.875rem 0.75rem;
+    46	  border-bottom: 3px solid transparent;
+    47	  color: var(--muted);
+    48	  font-weight: 500;
+    49	  text-decoration: none;
+    50	}
+    51	
+    52	nav a:hover {
+    53	  color: var(--text);
+    54	}
+    55	
+    56	nav a.active {
+    57	  border-bottom-color: var(--accent);
+    58	  color: var(--accent);
+    59	  font-weight: 600;
+    60	}
+    61	
+    62	main {
+    63	  padding-top: 1.5rem;
+    64	  padding-bottom: 3rem;
+    65	  /* Wide tables scroll inside the content area instead of stretching the page. */
+    66	  overflow-x: auto;
+    67	}
+    68	
+    69	h1 {
+    70	  margin: 0 0 1rem;
+    71	  font-size: 1.75rem;
+    72	  line-height: 1.2;
+    73	}
+    74	
+    75	h2 {
+    76	  margin: 0 0 0.75rem;
+    77	  font-size: 1.25rem;
+    78	}
+    79	
+    80	a {
+    81	  color: var(--accent);
+    82	}
+    83	
+    84	a:hover {
+    85	  color: var(--accent-dark);
+    86	}
+    87	
+    88	table {
+    89	  width: 100%;
+    90	  overflow: hidden;
+    91	  background: var(--surface);
+    92	  border: 1px solid var(--border);
+    93	  border-radius: var(--radius);
+    94	  border-collapse: separate;
+    95	  border-spacing: 0;
+    96	}
+    97	
+    98	th,
+    99	td {
+   100	  padding: 0.625rem 0.75rem;
+   101	  border-bottom: 1px solid var(--border);
+   102	  text-align: left;
+   103	  vertical-align: middle;
+   104	}
+   105	
+   106	th {
+   107	  background: var(--page);
+   108	  color: var(--muted);
+   109	  font-size: 0.8125rem;
+   110	  font-weight: 600;
+   111	  white-space: nowrap;
+   112	}
+   113	
+   114	tbody tr:last-child td {
+   115	  border-bottom: 0;
+   116	}
+   117	
+   118	tbody tr:hover td {
+   119	  background: #f9fafb;
+   120	}
+   121	
+   122	td a + button,
+   123	td button + button,
+   124	td button + a {
+   125	  margin-left: 0.75rem;
+   126	}
+   127	
+   128	dl {
+   129	  display: grid;
+   130	  grid-template-columns: max-content 1fr;
+   131	  gap: 0.5rem 1.5rem;
+   132	  margin: 0 0 1rem;
+   133	  padding: 1rem 1.25rem;
+   134	  background: var(--surface);
+   135	  border: 1px solid var(--border);
+   136	  border-radius: var(--radius);
+   137	}
+   138	
+   139	dt {
+   140	  color: var(--muted);
+   141	}
+   142	
+   143	dd {
+   144	  margin: 0;
+   145	}
+   146	
+   147	section {
+   148	  margin-top: 2rem;
+   149	}
+   150	
+   151	form {
+   152	  max-width: 28rem;
+   153	  padding: 0.25rem 1.25rem 1.25rem;
+   154	  background: var(--surface);
+   155	  border: 1px solid var(--border);
+   156	  border-radius: var(--radius);
+   157	}
+   158	
+   159	label {
+   160	  display: block;
+   161	  margin-top: 1rem;
+   162	  font-size: 0.875rem;
+   163	  font-weight: 600;
+   164	}
+   165	
+   166	input,
+   167	select,
+   168	textarea,
+   169	button {
+   170	  font: inherit;
+   171	}
+   172	
+   173	label input:not([type='checkbox'], [type='radio']),
+   174	label select,
+   175	label textarea {
+   176	  display: block;
+   177	  box-sizing: border-box;
+   178	  width: 100%;
+   179	  margin-top: 0.25rem;
+   180	  padding: 0.5rem 0.625rem;
+   181	  background: var(--surface);
+   182	  border: 1px solid var(--border);
+   183	  border-radius: var(--radius);
+   184	  color: var(--text);
+   185	  font-weight: 400;
+   186	}
+   187	
+   188	label input[type='checkbox'],
+   189	label input[type='radio'] {
+   190	  margin: 0 0.5rem 0 0;
+   191	}
+   192	
+   193	input:focus-visible,
+   194	select:focus-visible,
+   195	textarea:focus-visible,
+   196	button:focus-visible,
+   197	a:focus-visible {
+   198	  outline: 2px solid var(--accent);
+   199	  outline-offset: 2px;
+   200	}
+   201	
+   202	button {
+   203	  padding: 0.375rem 0.75rem;
+   204	  background: var(--surface);
+   205	  border: 1px solid var(--border);
+   206	  border-radius: var(--radius);
+   207	  color: var(--text);
+   208	  cursor: pointer;
+   209	}
+   210	
+   211	button:hover {
+   212	  background: var(--page);
+   213	}
+   214	
+   215	button[type='submit'] {
+   216	  margin: 1.25rem 1rem 0 0;
+   217	  padding: 0.5rem 1.25rem;
+   218	  background: var(--accent);
+   219	  border-color: var(--accent);
+   220	  color: #ffffff;
+   221	  font-weight: 600;
+   222	}
+   223	
+   224	button[type='submit']:hover {
+   225	  background: var(--accent-dark);
+   226	  border-color: var(--accent-dark);
+   227	}
+   228	
+   229	button:disabled {
+   230	  cursor: not-allowed;
+   231	  opacity: 0.6;
+   232	}
+   233	
+   234	.error {
+   235	  margin: 0.25rem 0 0;
+   236	  color: var(--danger);
+   237	  font-size: 0.875rem;
+   238	}
+   239	
+   240	p.error[role='alert']:not(label ~ .error) {
+   241	  margin: 1rem 0;
+   242	  padding: 0.5rem 0.75rem;
+   243	  background: var(--danger-surface);
+   244	  border: 1px solid #f3c2c8;
+   245	  border-radius: var(--radius);
+   246	}
+=== frontend/src/app/app.html
+     1	<header>
+     2	  <nav>
+     3	    <a routerLink="/vehicles" routerLinkActive="active">Vehicles</a>
+     4	  </nav>
+     5	</header>
+     6	
+     7	<main>
+     8	  <router-outlet />
+     9	</main>
+17:          "builder": "@angular/build:application",
+18-          "options": {
+19-            "browser": "src/main.ts",
+20-            "tsConfig": "tsconfig.app.json",
+--
+54:          "builder": "@angular/build:dev-server",
+55-          "configurations": {
+56-            "production": {
+57-              "buildTarget": "frontend:build:production"
+--
+68:        "test": {
+69:          "builder": "@angular/build:unit-test"
+70-        }
+71-      }
+72-    }
+8:        <artifactId>spring-boot-starter-parent</artifactId>
+9:        <version>3.5.16</version>
+14:    <artifactId>dealership</artifactId>
+15:    <version>0.0.1-SNAPSHOT</version>
+25:            <artifactId>spring-boot-starter-web</artifactId>
+29:            <artifactId>spring-boot-starter-data-jpa</artifactId>
+33:            <artifactId>spring-boot-starter-validation</artifactId>
+37:            <artifactId>flyway-core</artifactId>
+41:            <artifactId>h2</artifactId>
+46:            <artifactId>spring-boot-starter-test</artifactId>
+55:                <artifactId>spring-boot-maven-plugin</artifactId>

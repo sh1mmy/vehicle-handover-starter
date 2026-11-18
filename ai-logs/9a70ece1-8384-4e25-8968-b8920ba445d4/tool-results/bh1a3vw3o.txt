@@ -1,0 +1,1586 @@
+diff --git a/backend/src/main/java/com/example/dealership/config/ClockConfig.java b/backend/src/main/java/com/example/dealership/config/ClockConfig.java
+new file mode 100644
+index 0000000..7cb8e7c
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/config/ClockConfig.java
+@@ -0,0 +1,22 @@
++package com.example.dealership.config;
++
++import java.time.Clock;
++import java.time.ZoneId;
++
++import org.springframework.boot.autoconfigure.validation.ValidationConfigurationCustomizer;
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++
++@Configuration
++public class ClockConfig {
++
++    @Bean
++    public Clock clock() {
++        return Clock.system(ZoneId.of("Europe/Warsaw"));
++    }
++
++    @Bean
++    public ValidationConfigurationCustomizer clockProviderCustomizer(Clock clock) {
++        return configuration -> configuration.clockProvider(() -> clock);
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/customer/Customer.java b/backend/src/main/java/com/example/dealership/customer/Customer.java
+new file mode 100644
+index 0000000..0f5deed
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/customer/Customer.java
+@@ -0,0 +1,87 @@
++package com.example.dealership.customer;
++
++import jakarta.persistence.Column;
++import jakarta.persistence.Entity;
++import jakarta.persistence.GeneratedValue;
++import jakarta.persistence.GenerationType;
++import jakarta.persistence.Id;
++import jakarta.persistence.Table;
++
++@Entity
++@Table(name = "customer")
++public class Customer {
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @Column(nullable = false, length = 100)
++    private String firstName;
++
++    @Column(nullable = false, length = 100)
++    private String lastName;
++
++    @Column(nullable = false, length = 100)
++    private String email;
++
++    @Column(nullable = false, length = 20)
++    private String phone;
++
++    @Column(length = 10)
++    private String nip;
++
++    protected Customer() {
++    }
++
++    public Customer(String firstName, String lastName, String email, String phone, String nip) {
++        this.firstName = firstName;
++        this.lastName = lastName;
++        this.email = email;
++        this.phone = phone;
++        this.nip = nip;
++    }
++
++    public Long getId() {
++        return id;
++    }
++
++    public String getFirstName() {
++        return firstName;
++    }
++
++    public void setFirstName(String firstName) {
++        this.firstName = firstName;
++    }
++
++    public String getLastName() {
++        return lastName;
++    }
++
++    public void setLastName(String lastName) {
++        this.lastName = lastName;
++    }
++
++    public String getEmail() {
++        return email;
++    }
++
++    public void setEmail(String email) {
++        this.email = email;
++    }
++
++    public String getPhone() {
++        return phone;
++    }
++
++    public void setPhone(String phone) {
++        this.phone = phone;
++    }
++
++    public String getNip() {
++        return nip;
++    }
++
++    public void setNip(String nip) {
++        this.nip = nip;
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/customer/CustomerController.java b/backend/src/main/java/com/example/dealership/customer/CustomerController.java
+new file mode 100644
+index 0000000..f48ca02
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/customer/CustomerController.java
+@@ -0,0 +1,59 @@
++package com.example.dealership.customer;
++
++import java.net.URI;
++import java.util.List;
++
++import jakarta.validation.Valid;
++
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.DeleteMapping;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.PostMapping;
++import org.springframework.web.bind.annotation.PutMapping;
++import org.springframework.web.bind.annotation.RequestBody;
++import org.springframework.web.bind.annotation.RequestMapping;
++import org.springframework.web.bind.annotation.RestController;
++import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
++
++@RestController
++@RequestMapping("/api/customers")
++public class CustomerController {
++
++    private final CustomerService customerService;
++
++    public CustomerController(CustomerService customerService) {
++        this.customerService = customerService;
++    }
++
++    @GetMapping
++    public List<CustomerResponse> findAll() {
++        return customerService.findAll();
++    }
++
++    @GetMapping("/{id}")
++    public CustomerResponse findById(@PathVariable Long id) {
++        return customerService.findById(id);
++    }
++
++    @PostMapping
++    public ResponseEntity<CustomerResponse> create(@Valid @RequestBody CustomerRequest request) {
++        CustomerResponse response = customerService.create(request);
++        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
++                .path("/{id}")
++                .buildAndExpand(response.id())
++                .toUri();
++        return ResponseEntity.created(location).body(response);
++    }
++
++    @PutMapping("/{id}")
++    public CustomerResponse update(@PathVariable Long id, @Valid @RequestBody CustomerRequest request) {
++        return customerService.update(id, request);
++    }
++
++    @DeleteMapping("/{id}")
++    public ResponseEntity<Void> delete(@PathVariable Long id) {
++        customerService.delete(id);
++        return ResponseEntity.noContent().build();
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/customer/CustomerMapper.java b/backend/src/main/java/com/example/dealership/customer/CustomerMapper.java
+new file mode 100644
+index 0000000..0ee05db
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/customer/CustomerMapper.java
+@@ -0,0 +1,34 @@
++package com.example.dealership.customer;
++
++public final class CustomerMapper {
++
++    private CustomerMapper() {
++    }
++
++    public static Customer toEntity(CustomerRequest request) {
++        return new Customer(
++                request.firstName(),
++                request.lastName(),
++                request.email(),
++                request.phone(),
++                request.nip());
++    }
++
++    public static void updateEntity(Customer customer, CustomerRequest request) {
++        customer.setFirstName(request.firstName());
++        customer.setLastName(request.lastName());
++        customer.setEmail(request.email());
++        customer.setPhone(request.phone());
++        customer.setNip(request.nip());
++    }
++
++    public static CustomerResponse toResponse(Customer customer) {
++        return new CustomerResponse(
++                customer.getId(),
++                customer.getFirstName(),
++                customer.getLastName(),
++                customer.getEmail(),
++                customer.getPhone(),
++                customer.getNip());
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/customer/CustomerRepository.java b/backend/src/main/java/com/example/dealership/customer/CustomerRepository.java
+new file mode 100644
+index 0000000..107c214
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/customer/CustomerRepository.java
+@@ -0,0 +1,10 @@
++package com.example.dealership.customer;
++
++import org.springframework.data.jpa.repository.JpaRepository;
++
++public interface CustomerRepository extends JpaRepository<Customer, Long> {
++
++    boolean existsByEmail(String email);
++
++    boolean existsByEmailAndIdNot(String email, Long id);
++}
+diff --git a/backend/src/main/java/com/example/dealership/customer/CustomerRequest.java b/backend/src/main/java/com/example/dealership/customer/CustomerRequest.java
+new file mode 100644
+index 0000000..e0b462d
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/customer/CustomerRequest.java
+@@ -0,0 +1,31 @@
++package com.example.dealership.customer;
++
++import jakarta.validation.constraints.Email;
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.Pattern;
++import jakarta.validation.constraints.Size;
++
++public record CustomerRequest(
++        @NotBlank
++        @Size(max = 100)
++        String firstName,
++
++        @NotBlank
++        @Size(max = 100)
++        String lastName,
++
++        @NotBlank
++        @Email
++        @Size(max = 100)
++        String email,
++
++        @NotBlank
++        @Pattern(
++                regexp = "(?=.{9,20}$)\\+?[0-9]+([ -][0-9]+)*",
++                message = "must be 9 to 20 characters: digits separated by single spaces or hyphens, optionally starting with +")
++        String phone,
++
++        @Pattern(regexp = "[0-9]{10}", message = "must be exactly 10 digits")
++        String nip
++) {
++}
+diff --git a/backend/src/main/java/com/example/dealership/customer/CustomerResponse.java b/backend/src/main/java/com/example/dealership/customer/CustomerResponse.java
+new file mode 100644
+index 0000000..27b0ddc
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/customer/CustomerResponse.java
+@@ -0,0 +1,11 @@
++package com.example.dealership.customer;
++
++public record CustomerResponse(
++        Long id,
++        String firstName,
++        String lastName,
++        String email,
++        String phone,
++        String nip
++) {
++}
+diff --git a/backend/src/main/java/com/example/dealership/customer/CustomerService.java b/backend/src/main/java/com/example/dealership/customer/CustomerService.java
+new file mode 100644
+index 0000000..27fa71d
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/customer/CustomerService.java
+@@ -0,0 +1,64 @@
++package com.example.dealership.customer;
++
++import java.util.List;
++
++import com.example.dealership.error.ConflictException;
++import com.example.dealership.error.NotFoundException;
++
++import org.springframework.data.domain.Sort;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++@Service
++@Transactional(readOnly = true)
++public class CustomerService {
++
++    private final CustomerRepository customerRepository;
++
++    public CustomerService(CustomerRepository customerRepository) {
++        this.customerRepository = customerRepository;
++    }
++
++    public List<CustomerResponse> findAll() {
++        return customerRepository.findAll(Sort.by("id")).stream()
++                .map(CustomerMapper::toResponse)
++                .toList();
++    }
++
++    public CustomerResponse findById(Long id) {
++        return CustomerMapper.toResponse(getCustomer(id));
++    }
++
++    @Transactional
++    public CustomerResponse create(CustomerRequest request) {
++        if (customerRepository.existsByEmail(request.email())) {
++            throw emailAlreadyExists(request.email());
++        }
++        Customer customer = customerRepository.save(CustomerMapper.toEntity(request));
++        return CustomerMapper.toResponse(customer);
++    }
++
++    @Transactional
++    public CustomerResponse update(Long id, CustomerRequest request) {
++        Customer customer = getCustomer(id);
++        if (customerRepository.existsByEmailAndIdNot(request.email(), id)) {
++            throw emailAlreadyExists(request.email());
++        }
++        CustomerMapper.updateEntity(customer, request);
++        return CustomerMapper.toResponse(customerRepository.save(customer));
++    }
++
++    @Transactional
++    public void delete(Long id) {
++        customerRepository.delete(getCustomer(id));
++    }
++
++    private Customer getCustomer(Long id) {
++        return customerRepository.findById(id)
++                .orElseThrow(() -> new NotFoundException("Customer with id " + id + " not found"));
++    }
++
++    private static ConflictException emailAlreadyExists(String email) {
++        return new ConflictException("Customer with email " + email + " already exists");
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/handover/HandoverProblem.java b/backend/src/main/java/com/example/dealership/handover/HandoverProblem.java
+new file mode 100644
+index 0000000..0a97b20
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/handover/HandoverProblem.java
+@@ -0,0 +1,10 @@
++package com.example.dealership.handover;
++
++import com.example.dealership.vehicledocument.VehicleDocumentType;
++
++/** {@code documentType} is null for problems of the vehicle itself, such as a missing handover date. */
++public record HandoverProblem(
++        VehicleDocumentType documentType,
++        HandoverProblemReason reason
++) {
++}
+diff --git a/backend/src/main/java/com/example/dealership/handover/HandoverProblemReason.java b/backend/src/main/java/com/example/dealership/handover/HandoverProblemReason.java
+new file mode 100644
+index 0000000..c72bb03
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/handover/HandoverProblemReason.java
+@@ -0,0 +1,7 @@
++package com.example.dealership.handover;
++
++public enum HandoverProblemReason {
++    NOT_VERIFIED,
++    EXPIRED,
++    NO_HANDOVER_DATE
++}
+diff --git a/backend/src/main/java/com/example/dealership/handover/HandoverReadiness.java b/backend/src/main/java/com/example/dealership/handover/HandoverReadiness.java
+new file mode 100644
+index 0000000..3197253
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/handover/HandoverReadiness.java
+@@ -0,0 +1,13 @@
++package com.example.dealership.handover;
++
++import java.util.List;
++
++import com.example.dealership.vehicledocument.VehicleDocumentType;
++
++/** Response of {@code GET /api/vehicles/{vehicleId}/handover-readiness}, shaped as in the API contract. */
++public record HandoverReadiness(
++        boolean ready,
++        List<VehicleDocumentType> missingDocumentTypes,
++        List<HandoverProblem> problems
++) {
++}
+diff --git a/backend/src/main/java/com/example/dealership/handover/HandoverReadinessCheck.java b/backend/src/main/java/com/example/dealership/handover/HandoverReadinessCheck.java
+new file mode 100644
+index 0000000..1117117
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/handover/HandoverReadinessCheck.java
+@@ -0,0 +1,82 @@
++package com.example.dealership.handover;
++
++import java.time.LocalDate;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Optional;
++
++import com.example.dealership.vehicledocument.VehicleDocument;
++import com.example.dealership.vehicledocument.VehicleDocumentStatus;
++import com.example.dealership.vehicledocument.VehicleDocumentType;
++
++/**
++ * Handover readiness rules (INTENT.md R10-R17), as plain code without Spring.
++ *
++ * <ul>
++ *     <li>Required: sales agreement, invoice, COC, OC policy; the registration power of attorney only when the
++ *     dealer registers the vehicle.</li>
++ *     <li>A required type without an active (non-rejected) document is missing.</li>
++ *     <li>An active pending document is NOT_VERIFIED.</li>
++ *     <li>An active document expiring before the handover date is EXPIRED; expiring on that day is fine. Without a
++ *     handover date, expiry is compared with today (Z4).</li>
++ *     <li>No handover date adds NO_HANDOVER_DATE with documentType null, so the vehicle is never ready.</li>
++ *     <li>Order (Z7): types in enum order, NOT_VERIFIED before EXPIRED, NO_HANDOVER_DATE last.</li>
++ * </ul>
++ */
++public final class HandoverReadinessCheck {
++
++    private static final List<VehicleDocumentType> ALWAYS_REQUIRED = List.of(
++            VehicleDocumentType.SALES_AGREEMENT,
++            VehicleDocumentType.INVOICE,
++            VehicleDocumentType.COC,
++            VehicleDocumentType.OC_POLICY);
++
++    private HandoverReadinessCheck() {
++    }
++
++    public static HandoverReadiness evaluate(boolean registeredByDealer, LocalDate plannedHandoverDate,
++            List<VehicleDocument> documents, LocalDate today) {
++        LocalDate validOn = plannedHandoverDate != null ? plannedHandoverDate : today;
++        List<VehicleDocumentType> missing = new ArrayList<>();
++        List<HandoverProblem> problems = new ArrayList<>();
++
++        for (VehicleDocumentType type : requiredTypes(registeredByDealer)) {
++            Optional<VehicleDocument> active = activeDocument(documents, type);
++            if (active.isEmpty()) {
++                missing.add(type);
++                continue;
++            }
++            VehicleDocument document = active.get();
++            if (document.getStatus() == VehicleDocumentStatus.PENDING) {
++                problems.add(new HandoverProblem(type, HandoverProblemReason.NOT_VERIFIED));
++            }
++            if (document.getExpiryDate() != null && document.getExpiryDate().isBefore(validOn)) {
++                problems.add(new HandoverProblem(type, HandoverProblemReason.EXPIRED));
++            }
++        }
++        if (plannedHandoverDate == null) {
++            problems.add(new HandoverProblem(null, HandoverProblemReason.NO_HANDOVER_DATE));
++        }
++
++        return new HandoverReadiness(missing.isEmpty() && problems.isEmpty(), List.copyOf(missing),
++                List.copyOf(problems));
++    }
++
++    private static List<VehicleDocumentType> requiredTypes(boolean registeredByDealer) {
++        List<VehicleDocumentType> required = new ArrayList<>();
++        for (VehicleDocumentType type : VehicleDocumentType.values()) {
++            if (ALWAYS_REQUIRED.contains(type)
++                    || (registeredByDealer && type == VehicleDocumentType.REGISTRATION_POA)) {
++                required.add(type);
++            }
++        }
++        return required;
++    }
++
++    private static Optional<VehicleDocument> activeDocument(List<VehicleDocument> documents, VehicleDocumentType type) {
++        return documents.stream()
++                .filter(document -> document.getType() == type)
++                .filter(document -> document.getStatus() != VehicleDocumentStatus.REJECTED)
++                .findFirst();
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/handover/HandoverReadinessController.java b/backend/src/main/java/com/example/dealership/handover/HandoverReadinessController.java
+new file mode 100644
+index 0000000..776186c
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/handover/HandoverReadinessController.java
+@@ -0,0 +1,20 @@
++package com.example.dealership.handover;
++
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.RestController;
++
++@RestController
++public class HandoverReadinessController {
++
++    private final HandoverReadinessService readinessService;
++
++    public HandoverReadinessController(HandoverReadinessService readinessService) {
++        this.readinessService = readinessService;
++    }
++
++    @GetMapping("/api/vehicles/{vehicleId}/handover-readiness")
++    public HandoverReadiness getReadiness(@PathVariable Long vehicleId) {
++        return readinessService.getReadiness(vehicleId);
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/handover/HandoverReadinessService.java b/backend/src/main/java/com/example/dealership/handover/HandoverReadinessService.java
+new file mode 100644
+index 0000000..3a1b262
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/handover/HandoverReadinessService.java
+@@ -0,0 +1,39 @@
++package com.example.dealership.handover;
++
++import java.time.Clock;
++import java.time.LocalDate;
++
++import com.example.dealership.error.NotFoundException;
++import com.example.dealership.vehicle.Vehicle;
++import com.example.dealership.vehicle.VehicleRepository;
++import com.example.dealership.vehicledocument.VehicleDocumentRepository;
++
++import org.springframework.data.domain.Sort;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++@Service
++@Transactional(readOnly = true)
++public class HandoverReadinessService {
++
++    private final VehicleRepository vehicleRepository;
++    private final VehicleDocumentRepository documentRepository;
++    private final Clock clock;
++
++    public HandoverReadinessService(VehicleRepository vehicleRepository, VehicleDocumentRepository documentRepository,
++            Clock clock) {
++        this.vehicleRepository = vehicleRepository;
++        this.documentRepository = documentRepository;
++        this.clock = clock;
++    }
++
++    public HandoverReadiness getReadiness(Long vehicleId) {
++        Vehicle vehicle = vehicleRepository.findById(vehicleId)
++                .orElseThrow(() -> new NotFoundException("Vehicle with id " + vehicleId + " not found"));
++        return HandoverReadinessCheck.evaluate(
++                vehicle.isRegisteredByDealer(),
++                vehicle.getPlannedHandoverDate(),
++                documentRepository.findAllByVehicleId(vehicleId, Sort.by("id")),
++                LocalDate.now(clock));
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicle/Vehicle.java b/backend/src/main/java/com/example/dealership/vehicle/Vehicle.java
+index df7ad45..0839405 100644
+--- a/backend/src/main/java/com/example/dealership/vehicle/Vehicle.java
++++ b/backend/src/main/java/com/example/dealership/vehicle/Vehicle.java
+@@ -37,17 +37,27 @@ public class Vehicle {
+ 
+     private LocalDate plannedHandoverDate;
+ 
++    @Column(nullable = false)
++    private boolean registeredByDealer;
++
+     protected Vehicle() {
+     }
+ 
++    // Kept so code and tests written before registeredByDealer existed still compile (INTENT.md §7).
+     public Vehicle(String vin, String make, String model, Integer productionYear, FuelType fuelType,
+             LocalDate plannedHandoverDate) {
++        this(vin, make, model, productionYear, fuelType, plannedHandoverDate, false);
++    }
++
++    public Vehicle(String vin, String make, String model, Integer productionYear, FuelType fuelType,
++            LocalDate plannedHandoverDate, boolean registeredByDealer) {
+         this.vin = vin;
+         this.make = make;
+         this.model = model;
+         this.productionYear = productionYear;
+         this.fuelType = fuelType;
+         this.plannedHandoverDate = plannedHandoverDate;
++        this.registeredByDealer = registeredByDealer;
+     }
+ 
+     public Long getId() {
+@@ -101,4 +111,12 @@ public class Vehicle {
+     public void setPlannedHandoverDate(LocalDate plannedHandoverDate) {
+         this.plannedHandoverDate = plannedHandoverDate;
+     }
++
++    public boolean isRegisteredByDealer() {
++        return registeredByDealer;
++    }
++
++    public void setRegisteredByDealer(boolean registeredByDealer) {
++        this.registeredByDealer = registeredByDealer;
++    }
+ }
+diff --git a/backend/src/main/java/com/example/dealership/vehicle/VehicleMapper.java b/backend/src/main/java/com/example/dealership/vehicle/VehicleMapper.java
+index 03b23fc..b60f61d 100644
+--- a/backend/src/main/java/com/example/dealership/vehicle/VehicleMapper.java
++++ b/backend/src/main/java/com/example/dealership/vehicle/VehicleMapper.java
+@@ -12,7 +12,8 @@ public final class VehicleMapper {
+                 request.model(),
+                 request.productionYear(),
+                 request.fuelType(),
+-                request.plannedHandoverDate());
++                request.plannedHandoverDate(),
++                request.registeredByDealer());
+     }
+ 
+     public static void updateEntity(Vehicle vehicle, VehicleRequest request) {
+@@ -22,6 +23,7 @@ public final class VehicleMapper {
+         vehicle.setProductionYear(request.productionYear());
+         vehicle.setFuelType(request.fuelType());
+         vehicle.setPlannedHandoverDate(request.plannedHandoverDate());
++        vehicle.setRegisteredByDealer(request.registeredByDealer());
+     }
+ 
+     public static VehicleResponse toResponse(Vehicle vehicle) {
+@@ -32,6 +34,7 @@ public final class VehicleMapper {
+                 vehicle.getModel(),
+                 vehicle.getProductionYear(),
+                 vehicle.getFuelType(),
+-                vehicle.getPlannedHandoverDate());
++                vehicle.getPlannedHandoverDate(),
++                vehicle.isRegisteredByDealer());
+     }
+ }
+diff --git a/backend/src/main/java/com/example/dealership/vehicle/VehicleRequest.java b/backend/src/main/java/com/example/dealership/vehicle/VehicleRequest.java
+index 0646d90..009e6e9 100644
+--- a/backend/src/main/java/com/example/dealership/vehicle/VehicleRequest.java
++++ b/backend/src/main/java/com/example/dealership/vehicle/VehicleRequest.java
+@@ -27,6 +27,14 @@ public record VehicleRequest(
+         @NotNull
+         FuelType fuelType,
+ 
+-        LocalDate plannedHandoverDate
++        LocalDate plannedHandoverDate,
++
++        // Optional: a missing field or null becomes false, so request bodies from before this field stay valid.
++        boolean registeredByDealer
+ ) {
++
++    public VehicleRequest(String vin, String make, String model, Integer productionYear, FuelType fuelType,
++            LocalDate plannedHandoverDate) {
++        this(vin, make, model, productionYear, fuelType, plannedHandoverDate, false);
++    }
+ }
+diff --git a/backend/src/main/java/com/example/dealership/vehicle/VehicleResponse.java b/backend/src/main/java/com/example/dealership/vehicle/VehicleResponse.java
+index 1894fae..bb3fb82 100644
+--- a/backend/src/main/java/com/example/dealership/vehicle/VehicleResponse.java
++++ b/backend/src/main/java/com/example/dealership/vehicle/VehicleResponse.java
+@@ -9,6 +9,12 @@ public record VehicleResponse(
+         String model,
+         Integer productionYear,
+         FuelType fuelType,
+-        LocalDate plannedHandoverDate
++        LocalDate plannedHandoverDate,
++        boolean registeredByDealer
+ ) {
++
++    public VehicleResponse(Long id, String vin, String make, String model, Integer productionYear, FuelType fuelType,
++            LocalDate plannedHandoverDate) {
++        this(id, vin, make, model, productionYear, fuelType, plannedHandoverDate, false);
++    }
+ }
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/ExpiryDateNotBeforeIssueDate.java b/backend/src/main/java/com/example/dealership/vehicledocument/ExpiryDateNotBeforeIssueDate.java
+new file mode 100644
+index 0000000..69df7b6
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/ExpiryDateNotBeforeIssueDate.java
+@@ -0,0 +1,24 @@
++package com.example.dealership.vehicledocument;
++
++import java.lang.annotation.Documented;
++import java.lang.annotation.ElementType;
++import java.lang.annotation.Retention;
++import java.lang.annotation.RetentionPolicy;
++import java.lang.annotation.Target;
++
++import jakarta.validation.Constraint;
++import jakarta.validation.Payload;
++
++/** Cross-field rule reported on {@code expiryDate}, so the 400 has the usual {@code errors[{field}]} shape. */
++@Documented
++@Constraint(validatedBy = ExpiryDateNotBeforeIssueDateValidator.class)
++@Target(ElementType.TYPE)
++@Retention(RetentionPolicy.RUNTIME)
++public @interface ExpiryDateNotBeforeIssueDate {
++
++    String message() default "must not be before issue date";
++
++    Class<?>[] groups() default {};
++
++    Class<? extends Payload>[] payload() default {};
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/ExpiryDateNotBeforeIssueDateValidator.java b/backend/src/main/java/com/example/dealership/vehicledocument/ExpiryDateNotBeforeIssueDateValidator.java
+new file mode 100644
+index 0000000..eddea94
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/ExpiryDateNotBeforeIssueDateValidator.java
+@@ -0,0 +1,23 @@
++package com.example.dealership.vehicledocument;
++
++import jakarta.validation.ConstraintValidator;
++import jakarta.validation.ConstraintValidatorContext;
++
++public class ExpiryDateNotBeforeIssueDateValidator
++        implements ConstraintValidator<ExpiryDateNotBeforeIssueDate, VehicleDocumentRequest> {
++
++    @Override
++    public boolean isValid(VehicleDocumentRequest request, ConstraintValidatorContext context) {
++        if (request == null || request.issueDate() == null || request.expiryDate() == null) {
++            return true;
++        }
++        if (!request.expiryDate().isBefore(request.issueDate())) {
++            return true;
++        }
++        context.disableDefaultConstraintViolation();
++        context.buildConstraintViolationWithTemplate(context.getDefaultConstraintMessageTemplate())
++                .addPropertyNode("expiryDate")
++                .addConstraintViolation();
++        return false;
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocument.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocument.java
+new file mode 100644
+index 0000000..fb623a4
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocument.java
+@@ -0,0 +1,86 @@
++package com.example.dealership.vehicledocument;
++
++import java.time.LocalDate;
++
++import jakarta.persistence.Column;
++import jakarta.persistence.Entity;
++import jakarta.persistence.EnumType;
++import jakarta.persistence.Enumerated;
++import jakarta.persistence.GeneratedValue;
++import jakarta.persistence.GenerationType;
++import jakarta.persistence.Id;
++import jakarta.persistence.Table;
++
++@Entity
++@Table(name = "vehicle_document")
++public class VehicleDocument {
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @Column(name = "vehicle_id", nullable = false)
++    private Long vehicleId;
++
++    @Enumerated(EnumType.STRING)
++    @Column(nullable = false, length = 20)
++    private VehicleDocumentType type;
++
++    @Column(nullable = false, length = 50)
++    private String number;
++
++    @Column(nullable = false)
++    private LocalDate issueDate;
++
++    private LocalDate expiryDate;
++
++    @Enumerated(EnumType.STRING)
++    @Column(nullable = false, length = 20)
++    private VehicleDocumentStatus status;
++
++    protected VehicleDocument() {
++    }
++
++    public VehicleDocument(Long vehicleId, VehicleDocumentType type, String number, LocalDate issueDate,
++            LocalDate expiryDate) {
++        this.vehicleId = vehicleId;
++        this.type = type;
++        this.number = number;
++        this.issueDate = issueDate;
++        this.expiryDate = expiryDate;
++        this.status = VehicleDocumentStatus.PENDING;
++    }
++
++    public Long getId() {
++        return id;
++    }
++
++    public Long getVehicleId() {
++        return vehicleId;
++    }
++
++    public VehicleDocumentType getType() {
++        return type;
++    }
++
++    public String getNumber() {
++        return number;
++    }
++
++    public LocalDate getIssueDate() {
++        return issueDate;
++    }
++
++    public LocalDate getExpiryDate() {
++        return expiryDate;
++    }
++
++    public VehicleDocumentStatus getStatus() {
++        return status;
++    }
++
++    /** Sets the status; callers check {@link VehicleDocumentStatusTransitions} first. */
++    public void changeStatus(VehicleDocumentStatus status) {
++        this.status = status;
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentController.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentController.java
+new file mode 100644
+index 0000000..865fc0c
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentController.java
+@@ -0,0 +1,54 @@
++package com.example.dealership.vehicledocument;
++
++import java.net.URI;
++import java.util.List;
++
++import jakarta.validation.Valid;
++
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.GetMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.PostMapping;
++import org.springframework.web.bind.annotation.PutMapping;
++import org.springframework.web.bind.annotation.RequestBody;
++import org.springframework.web.bind.annotation.RequestMapping;
++import org.springframework.web.bind.annotation.RestController;
++import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
++
++@RestController
++@RequestMapping("/api/vehicles/{vehicleId}/documents")
++public class VehicleDocumentController {
++
++    private final VehicleDocumentService documentService;
++
++    public VehicleDocumentController(VehicleDocumentService documentService) {
++        this.documentService = documentService;
++    }
++
++    @GetMapping
++    public List<VehicleDocumentResponse> findAll(@PathVariable Long vehicleId) {
++        return documentService.findAll(vehicleId);
++    }
++
++    @GetMapping("/{id}")
++    public VehicleDocumentResponse findById(@PathVariable Long vehicleId, @PathVariable Long id) {
++        return documentService.findById(vehicleId, id);
++    }
++
++    @PostMapping
++    public ResponseEntity<VehicleDocumentResponse> create(@PathVariable Long vehicleId,
++            @Valid @RequestBody VehicleDocumentRequest request) {
++        VehicleDocumentResponse response = documentService.create(vehicleId, request);
++        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
++                .path("/{id}")
++                .buildAndExpand(response.id())
++                .toUri();
++        return ResponseEntity.created(location).body(response);
++    }
++
++    @PutMapping("/{id}/status")
++    public VehicleDocumentResponse changeStatus(@PathVariable Long vehicleId, @PathVariable Long id,
++            @Valid @RequestBody VehicleDocumentStatusRequest request) {
++        return documentService.changeStatus(vehicleId, id, request);
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentMapper.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentMapper.java
+new file mode 100644
+index 0000000..2054a19
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentMapper.java
+@@ -0,0 +1,27 @@
++package com.example.dealership.vehicledocument;
++
++public final class VehicleDocumentMapper {
++
++    private VehicleDocumentMapper() {
++    }
++
++    public static VehicleDocument toEntity(Long vehicleId, VehicleDocumentRequest request) {
++        return new VehicleDocument(
++                vehicleId,
++                request.type(),
++                request.number(),
++                request.issueDate(),
++                request.expiryDate());
++    }
++
++    public static VehicleDocumentResponse toResponse(VehicleDocument document) {
++        return new VehicleDocumentResponse(
++                document.getId(),
++                document.getVehicleId(),
++                document.getType(),
++                document.getNumber(),
++                document.getIssueDate(),
++                document.getExpiryDate(),
++                document.getStatus());
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentRepository.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentRepository.java
+new file mode 100644
+index 0000000..105eeca
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentRepository.java
+@@ -0,0 +1,17 @@
++package com.example.dealership.vehicledocument;
++
++import java.util.List;
++import java.util.Optional;
++
++import org.springframework.data.domain.Sort;
++import org.springframework.data.jpa.repository.JpaRepository;
++
++public interface VehicleDocumentRepository extends JpaRepository<VehicleDocument, Long> {
++
++    List<VehicleDocument> findAllByVehicleId(Long vehicleId, Sort sort);
++
++    Optional<VehicleDocument> findByIdAndVehicleId(Long id, Long vehicleId);
++
++    boolean existsByVehicleIdAndTypeAndStatusNot(Long vehicleId, VehicleDocumentType type,
++            VehicleDocumentStatus status);
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentRequest.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentRequest.java
+new file mode 100644
+index 0000000..dec0841
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentRequest.java
+@@ -0,0 +1,25 @@
++package com.example.dealership.vehicledocument;
++
++import java.time.LocalDate;
++
++import jakarta.validation.constraints.NotBlank;
++import jakarta.validation.constraints.NotNull;
++import jakarta.validation.constraints.PastOrPresent;
++import jakarta.validation.constraints.Size;
++
++@ExpiryDateNotBeforeIssueDate
++public record VehicleDocumentRequest(
++        @NotNull
++        VehicleDocumentType type,
++
++        @NotBlank
++        @Size(max = 50)
++        String number,
++
++        @NotNull
++        @PastOrPresent
++        LocalDate issueDate,
++
++        LocalDate expiryDate
++) {
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentResponse.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentResponse.java
+new file mode 100644
+index 0000000..628e563
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentResponse.java
+@@ -0,0 +1,14 @@
++package com.example.dealership.vehicledocument;
++
++import java.time.LocalDate;
++
++public record VehicleDocumentResponse(
++        Long id,
++        Long vehicleId,
++        VehicleDocumentType type,
++        String number,
++        LocalDate issueDate,
++        LocalDate expiryDate,
++        VehicleDocumentStatus status
++) {
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentService.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentService.java
+new file mode 100644
+index 0000000..32ddccb
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentService.java
+@@ -0,0 +1,72 @@
++package com.example.dealership.vehicledocument;
++
++import java.util.List;
++
++import com.example.dealership.error.ConflictException;
++import com.example.dealership.error.NotFoundException;
++import com.example.dealership.vehicle.VehicleRepository;
++
++import org.springframework.data.domain.Sort;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++@Service
++@Transactional(readOnly = true)
++public class VehicleDocumentService {
++
++    private final VehicleDocumentRepository documentRepository;
++    private final VehicleRepository vehicleRepository;
++
++    public VehicleDocumentService(VehicleDocumentRepository documentRepository, VehicleRepository vehicleRepository) {
++        this.documentRepository = documentRepository;
++        this.vehicleRepository = vehicleRepository;
++    }
++
++    public List<VehicleDocumentResponse> findAll(Long vehicleId) {
++        requireVehicle(vehicleId);
++        return documentRepository.findAllByVehicleId(vehicleId, Sort.by("id")).stream()
++                .map(VehicleDocumentMapper::toResponse)
++                .toList();
++    }
++
++    public VehicleDocumentResponse findById(Long vehicleId, Long id) {
++        requireVehicle(vehicleId);
++        return VehicleDocumentMapper.toResponse(getDocument(vehicleId, id));
++    }
++
++    @Transactional
++    public VehicleDocumentResponse create(Long vehicleId, VehicleDocumentRequest request) {
++        requireVehicle(vehicleId);
++        // Checked only here, in the transaction (INTENT.md Z8): H2 has no partial unique index.
++        if (documentRepository.existsByVehicleIdAndTypeAndStatusNot(vehicleId, request.type(),
++                VehicleDocumentStatus.REJECTED)) {
++            throw new ConflictException("Vehicle with id " + vehicleId + " already has an active document of type "
++                    + request.type());
++        }
++        VehicleDocument document = documentRepository.save(VehicleDocumentMapper.toEntity(vehicleId, request));
++        return VehicleDocumentMapper.toResponse(document);
++    }
++
++    @Transactional
++    public VehicleDocumentResponse changeStatus(Long vehicleId, Long id, VehicleDocumentStatusRequest request) {
++        requireVehicle(vehicleId);
++        VehicleDocument document = getDocument(vehicleId, id);
++        if (!VehicleDocumentStatusTransitions.isAllowed(document.getStatus(), request.status())) {
++            throw new ConflictException("Document with id " + id + " cannot change status from "
++                    + document.getStatus() + " to " + request.status());
++        }
++        document.changeStatus(request.status());
++        return VehicleDocumentMapper.toResponse(documentRepository.save(document));
++    }
++
++    private void requireVehicle(Long vehicleId) {
++        if (!vehicleRepository.existsById(vehicleId)) {
++            throw new NotFoundException("Vehicle with id " + vehicleId + " not found");
++        }
++    }
++
++    private VehicleDocument getDocument(Long vehicleId, Long id) {
++        return documentRepository.findByIdAndVehicleId(id, vehicleId)
++                .orElseThrow(() -> new NotFoundException("Document with id " + id + " not found"));
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentStatus.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentStatus.java
+new file mode 100644
+index 0000000..02e57d8
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentStatus.java
+@@ -0,0 +1,7 @@
++package com.example.dealership.vehicledocument;
++
++public enum VehicleDocumentStatus {
++    PENDING,
++    VERIFIED,
++    REJECTED
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentStatusRequest.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentStatusRequest.java
+new file mode 100644
+index 0000000..bcfaf3d
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentStatusRequest.java
+@@ -0,0 +1,9 @@
++package com.example.dealership.vehicledocument;
++
++import jakarta.validation.constraints.NotNull;
++
++public record VehicleDocumentStatusRequest(
++        @NotNull
++        VehicleDocumentStatus status
++) {
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentStatusTransitions.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentStatusTransitions.java
+new file mode 100644
+index 0000000..80fe400
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentStatusTransitions.java
+@@ -0,0 +1,16 @@
++package com.example.dealership.vehicledocument;
++
++/**
++ * Allowed document status changes: a pending document is either verified or rejected.
++ * A verified or rejected document never changes again; a correction is a new document (INTENT.md S1, Z3).
++ */
++public final class VehicleDocumentStatusTransitions {
++
++    private VehicleDocumentStatusTransitions() {
++    }
++
++    public static boolean isAllowed(VehicleDocumentStatus from, VehicleDocumentStatus to) {
++        return from == VehicleDocumentStatus.PENDING
++                && (to == VehicleDocumentStatus.VERIFIED || to == VehicleDocumentStatus.REJECTED);
++    }
++}
+diff --git a/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentType.java b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentType.java
+new file mode 100644
+index 0000000..47af398
+--- /dev/null
++++ b/backend/src/main/java/com/example/dealership/vehicledocument/VehicleDocumentType.java
+@@ -0,0 +1,9 @@
++package com.example.dealership.vehicledocument;
++
++public enum VehicleDocumentType {
++    SALES_AGREEMENT,
++    INVOICE,
++    COC,
++    OC_POLICY,
++    REGISTRATION_POA
++}
+diff --git a/backend/src/main/resources/db/migration/V4__customer.sql b/backend/src/main/resources/db/migration/V4__customer.sql
+new file mode 100644
+index 0000000..298462d
+--- /dev/null
++++ b/backend/src/main/resources/db/migration/V4__customer.sql
+@@ -0,0 +1,9 @@
++CREATE TABLE customer (
++    id         BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
++    first_name VARCHAR(100) NOT NULL,
++    last_name  VARCHAR(100) NOT NULL,
++    email      VARCHAR(100) NOT NULL,
++    phone      VARCHAR(20)  NOT NULL,
++    nip        VARCHAR(10),
++    CONSTRAINT uq_customer_email UNIQUE (email)
++);
+diff --git a/backend/src/main/resources/db/migration/V5__customer_seed.sql b/backend/src/main/resources/db/migration/V5__customer_seed.sql
+new file mode 100644
+index 0000000..5a234d6
+--- /dev/null
++++ b/backend/src/main/resources/db/migration/V5__customer_seed.sql
+@@ -0,0 +1,4 @@
++INSERT INTO customer (first_name, last_name, email, phone, nip) VALUES
++    ('Jan', 'Kowalski', 'jan.kowalski@example.test', '+48 600 100 200', NULL),
++    ('Anna', 'Nowak', 'anna.nowak@example.test', '601-200-300', NULL),
++    ('Piotr', 'Wisniewski', 'biuro@wisniewski-transport.example.test', '+48 22 123 45 67', '5260001246');
+diff --git a/backend/src/main/resources/db/migration/V6__vehicle_document.sql b/backend/src/main/resources/db/migration/V6__vehicle_document.sql
+new file mode 100644
+index 0000000..417bcfa
+--- /dev/null
++++ b/backend/src/main/resources/db/migration/V6__vehicle_document.sql
+@@ -0,0 +1,10 @@
++CREATE TABLE vehicle_document (
++    id          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
++    vehicle_id  BIGINT      NOT NULL,
++    type        VARCHAR(20) NOT NULL,
++    number      VARCHAR(50) NOT NULL,
++    issue_date  DATE        NOT NULL,
++    expiry_date DATE,
++    status      VARCHAR(20) NOT NULL,
++    CONSTRAINT fk_vehicle_document_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicle (id)
++);
+diff --git a/backend/src/main/resources/db/migration/V7__vehicle_registered_by_dealer.sql b/backend/src/main/resources/db/migration/V7__vehicle_registered_by_dealer.sql
+new file mode 100644
+index 0000000..065e9ce
+--- /dev/null
++++ b/backend/src/main/resources/db/migration/V7__vehicle_registered_by_dealer.sql
+@@ -0,0 +1 @@
++ALTER TABLE vehicle ADD COLUMN registered_by_dealer BOOLEAN DEFAULT FALSE NOT NULL;
+diff --git a/frontend/src/app/app.html b/frontend/src/app/app.html
+index 40b734f..672d1b4 100644
+--- a/frontend/src/app/app.html
++++ b/frontend/src/app/app.html
+@@ -1,6 +1,7 @@
+ <header>
+   <nav>
+     <a routerLink="/vehicles" routerLinkActive="active">Vehicles</a>
++    <a routerLink="/customers" routerLinkActive="active">Customers</a>
+   </nav>
+ </header>
+ 
+diff --git a/frontend/src/app/app.routes.ts b/frontend/src/app/app.routes.ts
+index 41f1f47..0e43297 100644
+--- a/frontend/src/app/app.routes.ts
++++ b/frontend/src/app/app.routes.ts
+@@ -2,8 +2,17 @@ import { Routes } from '@angular/router';
+ 
+ export const routes: Routes = [
+   { path: '', pathMatch: 'full', redirectTo: 'vehicles' },
++  {
++    path: 'vehicles/:vehicleId/documents',
++    loadChildren: () =>
++      import('./vehicle-documents/vehicle-documents.routes').then((m) => m.vehicleDocumentsRoutes),
++  },
+   {
+     path: 'vehicles',
+     loadChildren: () => import('./vehicles/vehicles.routes').then((m) => m.vehiclesRoutes),
+   },
++  {
++    path: 'customers',
++    loadChildren: () => import('./customers/customers.routes').then((m) => m.customersRoutes),
++  },
+ ];
+diff --git a/frontend/src/app/vehicles/vehicle-api.ts b/frontend/src/app/vehicles/vehicle-api.ts
+index 9487e29..e90c713 100644
+--- a/frontend/src/app/vehicles/vehicle-api.ts
++++ b/frontend/src/app/vehicles/vehicle-api.ts
+@@ -1,6 +1,7 @@
+ import { HttpClient, httpResource } from '@angular/common/http';
+ import { Injectable, Signal, inject } from '@angular/core';
+ import { Observable } from 'rxjs';
++import { VehicleDocumentType } from '../vehicle-documents/vehicle-document-api';
+ 
+ export type FuelType = 'PETROL' | 'DIESEL' | 'HYBRID' | 'ELECTRIC';
+ 
+@@ -21,10 +22,30 @@ export interface Vehicle {
+   productionYear: number;
+   fuelType: FuelType;
+   plannedHandoverDate: string | null;
++  registeredByDealer: boolean;
+ }
+ 
+ export type VehicleRequest = Omit<Vehicle, 'id'>;
+ 
++export type HandoverProblemReason = 'NOT_VERIFIED' | 'EXPIRED' | 'NO_HANDOVER_DATE';
++
++export const HANDOVER_PROBLEM_REASON_LABELS: Record<HandoverProblemReason, string> = {
++  NOT_VERIFIED: 'Not verified',
++  EXPIRED: 'Expired',
++  NO_HANDOVER_DATE: 'No handover date',
++};
++
++export interface HandoverProblem {
++  documentType: VehicleDocumentType | null;
++  reason: HandoverProblemReason;
++}
++
++export interface HandoverReadiness {
++  ready: boolean;
++  missingDocumentTypes: VehicleDocumentType[];
++  problems: HandoverProblem[];
++}
++
+ @Injectable({ providedIn: 'root' })
+ export class VehicleApi {
+   private readonly http = inject(HttpClient);
+@@ -41,6 +62,10 @@ export class VehicleApi {
+     });
+   }
+ 
++  readiness(id: Signal<number>) {
++    return httpResource<HandoverReadiness>(() => `${this.url}/${id()}/handover-readiness`);
++  }
++
+   create(request: VehicleRequest): Observable<Vehicle> {
+     return this.http.post<Vehicle>(this.url, request);
+   }
+diff --git a/frontend/src/app/vehicles/vehicle-detail.html b/frontend/src/app/vehicles/vehicle-detail.html
+index afe2439..370f438 100644
+--- a/frontend/src/app/vehicles/vehicle-detail.html
++++ b/frontend/src/app/vehicles/vehicle-detail.html
+@@ -16,11 +16,45 @@
+     <dd>{{ fuelTypeLabels[vehicle.fuelType] }}</dd>
+     <dt>Planned handover</dt>
+     <dd>{{ vehicle.plannedHandoverDate ?? '—' }}</dd>
++    <dt>Registered by dealer</dt>
++    <dd>{{ vehicle.registeredByDealer ? 'Yes' : 'No' }}</dd>
+   </dl>
+ 
+   <p><a [routerLink]="['/vehicles', vehicle.id, 'edit']">Edit</a></p>
+ 
+   <section>
+     <h2>Documents</h2>
++    <p><a [routerLink]="['/vehicles', vehicle.id, 'documents']">Documents</a></p>
++
++    <div data-readiness>
++      <h3>Handover readiness</h3>
++      @if (readiness.isLoading()) {
++        <p>Loading…</p>
++      } @else if (readiness.error(); as error) {
++        <p class="error" role="alert">{{ readinessError(error) }}</p>
++      } @else if (readiness.value(); as result) {
++        @if (result.ready) {
++          <p>Ready for handover</p>
++        } @else {
++          <p>Not ready for handover</p>
++          @if (result.missingDocumentTypes.length) {
++            <p>Missing documents:</p>
++            <ul>
++              @for (type of result.missingDocumentTypes; track type) {
++                <li>{{ documentTypeLabels[type] }}</li>
++              }
++            </ul>
++          }
++          @if (result.problems.length) {
++            <p>Problems:</p>
++            <ul>
++              @for (problem of result.problems; track $index) {
++                <li>{{ problemLabel(problem) }}</li>
++              }
++            </ul>
++          }
++        }
++      }
++    </div>
+   </section>
+ }
+diff --git a/frontend/src/app/vehicles/vehicle-detail.spec.ts b/frontend/src/app/vehicles/vehicle-detail.spec.ts
+new file mode 100644
+index 0000000..f45078a
+--- /dev/null
++++ b/frontend/src/app/vehicles/vehicle-detail.spec.ts
+@@ -0,0 +1,102 @@
++import { provideHttpClient } from '@angular/common/http';
++import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
++import { ComponentFixture, TestBed } from '@angular/core/testing';
++import { provideRouter } from '@angular/router';
++import { VehicleDetail } from './vehicle-detail';
++
++describe('VehicleDetail', () => {
++  let fixture: ComponentFixture<VehicleDetail>;
++  let element: HTMLElement;
++  let http: HttpTestingController;
++
++  const vehicle = {
++    id: 3,
++    vin: 'TMBJJ7NE8L0000003',
++    make: 'Skoda',
++    model: 'Octavia',
++    productionYear: 2026,
++    fuelType: 'HYBRID',
++    plannedHandoverDate: null,
++    registeredByDealer: true,
++  };
++
++  // No whenStable() here: it would wait for the readiness request, which each test flushes itself.
++  beforeEach(() => {
++    TestBed.configureTestingModule({
++      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
++    });
++    fixture = TestBed.createComponent(VehicleDetail);
++    element = fixture.nativeElement;
++    http = TestBed.inject(HttpTestingController);
++    fixture.componentRef.setInput('id', '3');
++    fixture.detectChanges();
++    http.expectOne({ method: 'GET', url: '/api/vehicles/3' }).flush(vehicle);
++  });
++
++  afterEach(() => http.verify());
++
++  async function flushReadiness(body: object, options?: { status: number; statusText: string }) {
++    http
++      .expectOne({ method: 'GET', url: '/api/vehicles/3/handover-readiness' })
++      .flush(body, options);
++    await fixture.whenStable();
++  }
++
++  function readinessText(): string {
++    return element.querySelector('[data-readiness]')!.textContent!.replace(/\s+/g, ' ').trim();
++  }
++
++  function items(): string[] {
++    return Array.from(element.querySelectorAll('[data-readiness] li'), (item) =>
++      item.textContent!.trim(),
++    );
++  }
++
++  it('shows whether the dealer registers the vehicle', async () => {
++    await flushReadiness({ ready: true, missingDocumentTypes: [], problems: [] });
++
++    await vi.waitFor(() => {
++      const labels = Array.from(element.querySelectorAll('dt'), (term) => term.textContent!.trim());
++      const index = labels.indexOf('Registered by dealer');
++      expect(index).toBeGreaterThan(-1);
++      expect(element.querySelectorAll('dd')[index].textContent!.trim()).toBe('Yes');
++    });
++  });
++
++  it('shows that the vehicle is ready for handover', async () => {
++    await flushReadiness({ ready: true, missingDocumentTypes: [], problems: [] });
++
++    await vi.waitFor(() => expect(readinessText()).toContain('Ready for handover'));
++    expect(items()).toEqual([]);
++  });
++
++  it('lists missing documents and problems when the vehicle is not ready', async () => {
++    await flushReadiness({
++      ready: false,
++      missingDocumentTypes: ['COC', 'REGISTRATION_POA'],
++      problems: [
++        { documentType: 'INVOICE', reason: 'NOT_VERIFIED' },
++        { documentType: 'OC_POLICY', reason: 'EXPIRED' },
++        { documentType: null, reason: 'NO_HANDOVER_DATE' },
++      ],
++    });
++
++    await vi.waitFor(() => expect(readinessText()).toContain('Not ready for handover'));
++    expect(items()).toEqual([
++      'COC',
++      'Registration POA',
++      'Invoice: Not verified',
++      'OC policy: Expired',
++      'No handover date',
++    ]);
++  });
++
++  it('shows the ProblemDetail detail when readiness cannot be loaded', async () => {
++    await flushReadiness(
++      { title: 'Service Unavailable', status: 503, detail: 'Database is unavailable' },
++      { status: 503, statusText: 'Service Unavailable' },
++    );
++
++    await vi.waitFor(() => expect(readinessText()).toContain('Database is unavailable'));
++  });
++});
+diff --git a/frontend/src/app/vehicles/vehicle-detail.ts b/frontend/src/app/vehicles/vehicle-detail.ts
+index b09ee4e..2d20f37 100644
+--- a/frontend/src/app/vehicles/vehicle-detail.ts
++++ b/frontend/src/app/vehicles/vehicle-detail.ts
+@@ -1,7 +1,13 @@
+ import { Component, inject, input, numberAttribute } from '@angular/core';
+ import { RouterLink } from '@angular/router';
+-import { loadErrorMessage } from '../shared/problem-detail';
+-import { FUEL_TYPE_LABELS, VehicleApi } from './vehicle-api';
++import { loadErrorMessage, problemDetailMessage } from '../shared/problem-detail';
++import { VEHICLE_DOCUMENT_TYPE_LABELS } from '../vehicle-documents/vehicle-document-api';
++import {
++  FUEL_TYPE_LABELS,
++  HANDOVER_PROBLEM_REASON_LABELS,
++  HandoverProblem,
++  VehicleApi,
++} from './vehicle-api';
+ 
+ @Component({
+   selector: 'app-vehicle-detail',
+@@ -14,9 +20,22 @@ export class VehicleDetail {
+   readonly id = input.required({ transform: numberAttribute });
+ 
+   protected readonly vehicle = this.vehicleApi.get(this.id);
++  protected readonly readiness = this.vehicleApi.readiness(this.id);
+   protected readonly fuelTypeLabels = FUEL_TYPE_LABELS;
++  protected readonly documentTypeLabels = VEHICLE_DOCUMENT_TYPE_LABELS;
+ 
+   protected loadError(error: unknown): string {
+     return loadErrorMessage(error, 'Vehicle not found');
+   }
++
++  protected readinessError(error: unknown): string {
++    return problemDetailMessage(error);
++  }
++
++  protected problemLabel(problem: HandoverProblem): string {
++    const reason = HANDOVER_PROBLEM_REASON_LABELS[problem.reason];
++    return problem.documentType === null
++      ? reason
++      : `${this.documentTypeLabels[problem.documentType]}: ${reason}`;
++  }
+ }
+diff --git a/frontend/src/app/vehicles/vehicle-form.html b/frontend/src/app/vehicles/vehicle-form.html
+index 8596f94..cc2114a 100644
+--- a/frontend/src/app/vehicles/vehicle-form.html
++++ b/frontend/src/app/vehicles/vehicle-form.html
+@@ -75,6 +75,11 @@
+       }
+     }
+ 
++    <label>
++      <input type="checkbox" [formField]="vehicleForm.registeredByDealer" />
++      Dealer registers the vehicle
++    </label>
++
+     <button type="submit" [disabled]="vehicleForm().submitting()">Save</button>
+     <a [routerLink]="isEdit() ? ['/vehicles', id()] : ['/vehicles']">Cancel</a>
+   </form>
+diff --git a/frontend/src/app/vehicles/vehicle-form.spec.ts b/frontend/src/app/vehicles/vehicle-form.spec.ts
+index 9a67c0c..78cacea 100644
+--- a/frontend/src/app/vehicles/vehicle-form.spec.ts
++++ b/frontend/src/app/vehicles/vehicle-form.spec.ts
+@@ -33,6 +33,11 @@ describe('VehicleForm', () => {
+     select.dispatchEvent(new Event('input'));
+   }
+ 
++  function check(): void {
++    // A real click toggles the box and fires input and change, like the user does.
++    element.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
++  }
++
+   function fillValidVehicle(): void {
+     fill('text', 0, 'WVWZZZ1KZAW000001');
+     fill('text', 1, 'Volkswagen');
+@@ -111,12 +116,24 @@ describe('VehicleForm', () => {
+       productionYear: 2025,
+       fuelType: 'PETROL',
+       plannedHandoverDate: '2026-12-15',
++      registeredByDealer: false,
+     });
+     request.flush({ id: 7, ...request.request.body });
+ 
+     await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(['/vehicles', 7]));
+   });
+ 
++  it('sends registeredByDealer true when the checkbox is ticked', async () => {
++    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
++    fillValidVehicle();
++    check();
++    await submit();
++
++    const request = http.expectOne({ method: 'POST', url: '/api/vehicles' });
++    expect(request.request.body.registeredByDealer).toBe(true);
++    request.flush({ id: 8, ...request.request.body });
++  });
++
+   it('loads the vehicle in edit mode and updates it', async () => {
+     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+     const vehicle = {
+@@ -127,6 +144,7 @@ describe('VehicleForm', () => {
+       productionYear: 2026,
+       fuelType: 'HYBRID',
+       plannedHandoverDate: null,
++      registeredByDealer: true,
+     };
+     fixture.componentRef.setInput('id', '3');
+     fixture.detectChanges();
+@@ -143,6 +161,7 @@ describe('VehicleForm', () => {
+       productionYear: 2026,
+       fuelType: 'HYBRID',
+       plannedHandoverDate: null,
++      registeredByDealer: true,
+     });
+     request.flush({ ...vehicle, model: 'Superb' });
+ 
+diff --git a/frontend/src/app/vehicles/vehicle-form.ts b/frontend/src/app/vehicles/vehicle-form.ts
+index 7776763..a0b6a98 100644
+--- a/frontend/src/app/vehicles/vehicle-form.ts
++++ b/frontend/src/app/vehicles/vehicle-form.ts
+@@ -20,6 +20,7 @@ interface VehicleFormModel {
+   productionYear: number | null;
+   fuelType: FuelType | '';
+   plannedHandoverDate: string;
++  registeredByDealer: boolean;
+ }
+ 
+ function toFormModel(vehicle: Vehicle | undefined): VehicleFormModel {
+@@ -30,6 +31,7 @@ function toFormModel(vehicle: Vehicle | undefined): VehicleFormModel {
+     productionYear: vehicle?.productionYear ?? null,
+     fuelType: vehicle?.fuelType ?? '',
+     plannedHandoverDate: vehicle?.plannedHandoverDate ?? '',
++    registeredByDealer: vehicle?.registeredByDealer ?? false,
+   };
+ }
+ 
+@@ -41,6 +43,7 @@ function toRequest(model: VehicleFormModel): VehicleRequest {
+     productionYear: model.productionYear!,
+     fuelType: model.fuelType as FuelType,
+     plannedHandoverDate: model.plannedHandoverDate || null,
++    registeredByDealer: model.registeredByDealer,
+   };
+ }
+ 
