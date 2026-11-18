@@ -23,5 +23,36 @@
   <section>
     <h2>Documents</h2>
     <p><a [routerLink]="['/vehicles', vehicle.id, 'documents']">Documents</a></p>
+
+    <div data-readiness>
+      <h3>Handover readiness</h3>
+      @if (readiness.isLoading()) {
+        <p>Loading…</p>
+      } @else if (readiness.error(); as error) {
+        <p class="error" role="alert">{{ readinessError(error) }}</p>
+      } @else if (readiness.value(); as result) {
+        @if (result.ready) {
+          <p>Ready for handover</p>
+        } @else {
+          <p>Not ready for handover</p>
+          @if (result.missingDocumentTypes.length) {
+            <p>Missing documents:</p>
+            <ul>
+              @for (type of result.missingDocumentTypes; track type) {
+                <li>{{ documentTypeLabels[type] }}</li>
+              }
+            </ul>
+          }
+          @if (result.problems.length) {
+            <p>Problems:</p>
+            <ul>
+              @for (problem of result.problems; track $index) {
+                <li>{{ problemLabel(problem) }}</li>
+              }
+            </ul>
+          }
+        }
+      }
+    </div>
   </section>
 }

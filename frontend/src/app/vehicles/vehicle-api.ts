@@ -1,6 +1,7 @@
 import { HttpClient, httpResource } from '@angular/common/http';
 import { Injectable, Signal, inject } from '@angular/core';
 import { Observable } from 'rxjs';
+import { VehicleDocumentType } from '../vehicle-documents/vehicle-document-api';
 
 export type FuelType = 'PETROL' | 'DIESEL' | 'HYBRID' | 'ELECTRIC';
 
@@ -25,6 +26,25 @@ export interface Vehicle {
 
 export type VehicleRequest = Omit<Vehicle, 'id'>;
 
+export type HandoverProblemReason = 'NOT_VERIFIED' | 'EXPIRED' | 'NO_HANDOVER_DATE';
+
+export const HANDOVER_PROBLEM_REASON_LABELS: Record<HandoverProblemReason, string> = {
+  NOT_VERIFIED: 'Not verified',
+  EXPIRED: 'Expired',
+  NO_HANDOVER_DATE: 'No handover date',
+};
+
+export interface HandoverProblem {
+  documentType: VehicleDocumentType | null;
+  reason: HandoverProblemReason;
+}
+
+export interface HandoverReadiness {
+  ready: boolean;
+  missingDocumentTypes: VehicleDocumentType[];
+  problems: HandoverProblem[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class VehicleApi {
   private readonly http = inject(HttpClient);
@@ -39,6 +59,10 @@ export class VehicleApi {
       const vehicleId = id();
       return vehicleId === undefined ? undefined : `${this.url}/${vehicleId}`;
     });
+  }
+
+  readiness(id: Signal<number>) {
+    return httpResource<HandoverReadiness>(() => `${this.url}/${id()}/handover-readiness`);
   }
 
   create(request: VehicleRequest): Observable<Vehicle> {
