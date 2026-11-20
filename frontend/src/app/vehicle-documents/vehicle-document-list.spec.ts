@@ -54,6 +54,11 @@ describe('VehicleDocumentList', () => {
     return Array.from(element.querySelectorAll('.error'), (error) => error.textContent!.trim());
   }
 
+  function rowStatus(rowIndex: number): string {
+    const row = element.querySelectorAll('tbody tr')[rowIndex];
+    return row.querySelectorAll('td')[4].textContent!.trim();
+  }
+
   it('offers Verify for pending and rejected documents and Reject for pending and verified ones', () => {
     expect(rowButtons(0)).toEqual(['Verify', 'Reject']);
     expect(rowButtons(1)).toEqual(['Reject']);
@@ -93,6 +98,9 @@ describe('VehicleDocumentList', () => {
         'Vehicle with id 1 already has an active document of type OC_POLICY',
       ]),
     );
+    await fixture.whenStable();
+    expect(rowStatus(2)).toBe('Rejected');
+    expect(rowButtons(2)).toEqual(['Verify']);
   });
 
   it('verifies a pending document and reloads the list', async () => {
@@ -148,14 +156,14 @@ describe('VehicleDocumentList', () => {
       {
         title: 'Conflict',
         status: 409,
-        detail: 'Document with id 5 cannot change status from REJECTED to VERIFIED',
+        detail: 'Document with id 5 cannot change status from VERIFIED to VERIFIED',
       },
       { status: 409, statusText: 'Conflict' },
     );
 
     await vi.waitFor(() =>
       expect(errors()).toEqual([
-        'Document with id 5 cannot change status from REJECTED to VERIFIED',
+        'Document with id 5 cannot change status from VERIFIED to VERIFIED',
       ]),
     );
   });

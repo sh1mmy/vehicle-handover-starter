@@ -336,15 +336,15 @@ class VehicleDocumentControllerTest {
     @Test
     void changeStatusReturnsConflictProblemWhenTransitionIsNotAllowed() throws Exception {
         when(documentService.changeStatus(eq(1L), eq(1L), any(VehicleDocumentStatusRequest.class)))
-                .thenThrow(new ConflictException("Document with id 1 cannot change status from REJECTED to VERIFIED"));
+                .thenThrow(new ConflictException("Document with id 1 cannot change status from REJECTED to PENDING"));
 
         mockMvc.perform(put("/api/vehicles/1/documents/1/status")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\": \"VERIFIED\"}"))
+                        .content("{\"status\": \"PENDING\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.detail").value("Document with id 1 cannot change status from REJECTED to VERIFIED"));
+                .andExpect(jsonPath("$.detail").value("Document with id 1 cannot change status from REJECTED to PENDING"));
     }
 
     private static String invalidBody() {
