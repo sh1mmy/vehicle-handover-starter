@@ -14,7 +14,7 @@
 | R3 | Dodanie dokumentu: `POST /api/vehicles/{vehicleId}/documents` z polami `type`, `number`, `issueDate` i opcjonalnym `expiryDate`. | [K] „Dodanie dokumentu: `type`, `number`, `issueDate`, opcjonalnie `expiryDate`” |
 | R4 | Nowy dokument zawsze ma status `PENDING`. Klient API nie może podać statusu przy tworzeniu. | [K] „Nowy dokument ma status `PENDING`”; [T] Anna: „Jak ktoś wgra skan, dokument czeka na weryfikację.” |
 | R5 | Statusy to `PENDING`, `VERIFIED`, `REJECTED`. Zmiana idzie przez `PUT …/documents/{documentId}/status` z body `{"status": …}`. | [K]; [T] Anna: „jest albo zweryfikowany, albo odrzucony” |
-| R6 | Dozwolone są tylko przejścia `PENDING → VERIFIED`, `PENDING → REJECTED` i `VERIFIED → REJECTED`. Każda inna zmiana zwraca **409**. `REJECTED` jest stanem końcowym. | [K] „Niedozwolona zmiana statusu dokumentu również zwraca 409”; [T] Anna: „Odrzucony dokument zostaje odrzucony.” |
+| R6 | Dozwolone są tylko przejścia `PENDING → VERIFIED`, `PENDING → REJECTED`, `VERIFIED → REJECTED` i `REJECTED → VERIFIED`. To ostatnie tylko wtedy, gdy pojazd nie ma innego aktywnego dokumentu tego typu (inaczej **409**, ten sam komunikat co przy dodaniu, R7). Każda inna zmiana zwraca **409**. | [K] „Niedozwolona zmiana statusu dokumentu również zwraca 409”; [T] Tomek: „przestawiamy status na zweryfikowany”; decyzja dyrektora (S1) |
 | R7 | Pojazd może mieć najwyżej jeden aktywny (`PENDING` lub `VERIFIED`) dokument danego typu. Dodanie kolejnego zwraca **409**. Odrzucone dokumenty zostają w historii. | [K] „Dodanie dokumentu typu, który ma już aktywny (nieodrzucony) dokument, zwraca 409”; [T] Anna: „Jeden aktualny każdego typu. Odrzucone mogą wisieć w historii” |
 | R8 | `issueDate` nie może być z przyszłości (dzisiaj jest dozwolone), w przeciwnym razie **400**. | [T] Anna: „Nie może być z przyszłości.” |
 | R9 | `expiryDate` jest opcjonalna. | [K] „opcjonalnie `expiryDate`”; [T] Anna: „Nie każdy. Umowa i faktura nie mają.” |
@@ -50,7 +50,11 @@
 | Reguła | Przypadek brzegowy | Oczekiwany wynik |
 |---|---|---|
 | R4 status początkowy | Body POST zawiera `"status": "VERIFIED"` | Pole jest ignorowane, dokument ma `PENDING`. Request nie zna pola `status`. |
-| R6 przejścia | `REJECTED → VERIFIED` (wersja Tomka) | 409 |
+| R6 przejścia | `REJECTED → VERIFIED` (wersja Tomka, decyzja dyrektora), brak innego aktywnego dokumentu tego typu | 200, dokument znów jest aktywny i `VERIFIED` |
+| R6 + R7 | `REJECTED → VERIFIED`, a pojazd ma już inny `PENDING` lub `VERIFIED` dokument tego typu | 409 `Vehicle with id X already has an active document of type T`, status zostaje `REJECTED` |
+| R6 + R7 | Dwa odrzucone dokumenty tego samego typu, oba weryfikowane po kolei | Pierwszy 200, drugi 409 |
+| R6 | `REJECTED → PENDING`, `REJECTED → REJECTED` | 409 |
+| R6 | Ponownie zweryfikowany dokument → `REJECTED` | 200 (zwykłe `VERIFIED → REJECTED`) |
 | R6 | `PENDING → PENDING`, `VERIFIED → VERIFIED` | 409 (to nie jest zmiana stanu) |
 | R6 | `VERIFIED → REJECTED` (błąd zauważony po weryfikacji albo dokument już nieważny, np. polisa do odnowienia) | 200 według Z3 |
 | R6 + R7 | Zweryfikowana polisa wygasła: odrzucenie jej, potem nowa polisa tego samego typu | `VERIFIED → REJECTED` 200, potem POST 201. Bez odrzucenia POST daje 409 |
@@ -98,13 +102,13 @@
 
 | # | Sprzeczność | Co obowiązuje |
 |---|---|---|
-| S1 | **Odrzucony dokument.** Tomek: „jak odrzucimy, a klient doniesie poprawioną wersję, to po prostu przestawiamy status na zweryfikowany”. Anna: „Odrzucony dokument zostaje odrzucony. Jak klient przyniesie poprawkę, wgrywamy nowy dokument.” | **Wersja Anny.** Jest ostatnia, Anna wprost ją rozstrzyga („Na razie róbcie po mojemu”) i jest zgodna z [K] („aktywny (nieodrzucony)”, 409 na niedozwoloną zmianę statusu). `REJECTED` jest stanem końcowym. Ryzyko: dyrektor może zdecydować inaczej (P1). Zmiana sprowadzałaby się wtedy do jednej reguły przejść. |
+| S1 | **Odrzucony dokument.** Tomek: „jak odrzucimy, a klient doniesie poprawioną wersję, to po prostu przestawiamy status na zweryfikowany”. Anna: „Odrzucony dokument zostaje odrzucony. Jak klient przyniesie poprawkę, wgrywamy nowy dokument.” | **Wersja Tomka (decyzja dyrektora, P1).** Odrzucony dokument można przestawić na `VERIFIED`, ale tylko wtedy, gdy pojazd nie ma innego aktywnego dokumentu tego typu, więc R7 nadal obowiązuje. Wcześniej obowiązywała wersja Anny (`REJECTED` jako stan końcowy), patrz `DECISIONS.md`. |
 | S2 | **Odrzucony = brak?** Anna wcześniej: „Odrzucone mogą wisieć w historii”, Tomek: „Inaczej mamy po trzy faktury”. To nie jest sprzeczność, tylko obawa o bałagan. | Historia zostaje. Lista dokumentów pokazuje wszystkie, a gotowość patrzy tylko na aktywne. W UI można wizualnie odróżnić odrzucone. |
 | S3 | **Data ważności.** Anna: „Polisa ma, pełnomocnictwo zwykle też”. [K]: `expiryDate` opcjonalne dla wszystkich typów. | **[K].** Nie wymuszam `expiryDate` dla `OC_POLICY`, bo testy oceniających mogą dodawać polisę bez daty. Pytanie P3. |
 
 ## 4. Pytania do klienta
 
-1. **P1** (S1): Czy dyrektor zatwierdził zasadę, że odrzucony dokument zostaje odrzucony?
+1. **P1** (S1): Czy dyrektor zatwierdził zasadę, że odrzucony dokument zostaje odrzucony? **Rozstrzygnięte:** nie, obowiązuje wersja Tomka z warunkiem R7 (S1, R6).
 2. **P2**: Czy zweryfikowany dokument można później odrzucić? Przyjęte: tak (Z3), bo inaczej zweryfikowanej, a już nieważnej polisy nie da się zastąpić nową. Do potwierdzenia z klientem, czy odrzucenie zweryfikowanego dokumentu wymaga uprawnień lub zapisania powodu (P9).
 3. **P3**: Czy polisa OC musi mieć datę ważności? Polisa bez daty jest dziś zawsze uznawana za ważną.
 4. **P4**: Czy umowa i faktura mogą mieć datę ważności, czy system ma ją odrzucać?
@@ -121,7 +125,7 @@
 |---|---|---|
 | Z1 | Flaga przy pojeździe to `registeredByDealer: boolean`, domyślnie `false`. | Anna: „Domyślnie klient rejestruje sam”. To najprostszy sposób na „Tomek zaznacza”. |
 | Z2 | Gotowość jest liczona na żądanie, nic nie jest zapisywane. | Gotowość zależy od dat (dziś, data wydania) i zmienia się bez żadnego zapisu, więc stan zapisany w bazie by się rozjeżdżał. |
-| Z3 | `PENDING` przechodzi w `VERIFIED` albo `REJECTED`, `VERIFIED` można jeszcze odrzucić, `REJECTED` jest końcowy. | Odrzucony zostaje odrzucony (Anna, S1). Odrzucenie zweryfikowanego jest potrzebne, bo przy jednym aktywnym dokumencie typu (R7) zweryfikowanej, a już nieważnej polisy nie dałoby się zastąpić nową: POST daje 409, a starej nie można odrzucić. Pierwotna wersja („zmiana tylko z `PENDING`”) miała tę dziurę, poprawione po oddaniu (DECISIONS.md). |
+| Z3 | `PENDING` przechodzi w `VERIFIED` albo `REJECTED`, `VERIFIED` można jeszcze odrzucić, `REJECTED` można znów zweryfikować, jeśli nie ma innego aktywnego dokumentu tego typu. Czysta klasa przejść zna tylko stany, a warunek „brak innego aktywnego” sprawdza serwis tym samym zapytaniem co przy dodaniu (Z8). | Wersja Tomka według decyzji dyrektora (S1). Odrzucenie zweryfikowanego jest potrzebne, bo przy jednym aktywnym dokumencie typu (R7) zweryfikowanej, a już nieważnej polisy nie dałoby się zastąpić nową: POST daje 409, a starej nie można odrzucić. Pierwotna wersja („zmiana tylko z `PENDING`”) miała tę dziurę, poprawione po oddaniu (DECISIONS.md). |
 | Z4 | Bez daty wydania `EXPIRED` liczę względem dzisiaj. | Przykład w [K] pokazuje `EXPIRED` obok `NO_HANDOVER_DATE`. Dokument wygasły przed dzisiaj będzie wygasły w każdej przyszłej dacie wydania. |
 | Z5 | `expiryDate` < `issueDate` zwraca 400 (błąd na polu `expiryDate`). | Analogicznie do „data z przyszłości = pomyłka przy wpisywaniu” (Anna). |
 | Z6 | `expiryDate` jest przyjmowane dla każdego typu. | [K] nie robi wyjątków (P4). |

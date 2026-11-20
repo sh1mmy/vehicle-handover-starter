@@ -282,3 +282,28 @@ Do tego helper w nowym teście checkboxa: samo zdarzenie `change` nie aktualizuj
 **Wniosek:** reguły, które się nawzajem ograniczają (tu: przejścia statusu i jeden aktywny dokument typu), trzeba sprawdzić na scenariuszu przepływu, a nie tylko każdą osobno.
 
 **UI:** lista dokumentów pokazuje Verify tylko przy `PENDING`, a Reject przy `PENDING` i `VERIFIED`. Odrzucony dokument nie ma akcji. Odnowienie polisy da się więc zrobić z UI. Dwa istniejące testy spec listy zmieniły oczekiwania zgodnie z nowym wymaganiem, do tego doszedł test odrzucenia zweryfikowanego dokumentu.
+
+## Decyzja dyrektora: odrzucony dokument można znów zweryfikować (S1, P1)
+
+**Decyzja:**
+- Obowiązuje wersja Tomka: `REJECTED → VERIFIED` jest dozwolone.
+- Warunek: pojazd nie ma innego aktywnego (`PENDING` lub `VERIFIED`) dokumentu tego typu. W przeciwnym razie odpowiedź to 409 z tym samym komunikatem co przy dodaniu: „Vehicle with id X already has an active document of type T”.
+- `REJECTED → PENDING` i `REJECTED → REJECTED` dalej dają 409. `REJECTED` przestaje być stanem końcowym.
+- Zaktualizowane: R6, S1, P1, Z3 i przypadki brzegowe w §2 w INTENT.md.
+
+**Implementacja:**
+- `VehicleDocumentStatusTransitions` dopuszcza `REJECTED → VERIFIED`. Klasa zostaje czysta i zna tylko stany.
+- `VehicleDocumentService.changeStatus` przy zmianie z `REJECTED` sprawdza to samo `existsByVehicleIdAndTypeAndStatusNot(..., REJECTED)` co `create` (wspólna metoda prywatna). Sam odrzucony dokument nie jest aktywny, więc nie trzeba `...AndIdNot`.
+- Ryzyko wyścigu jest takie samo jak w Z8: równoległe dodanie dokumentu i ponowna weryfikacja odrzuconego mogą obie przejść. Opcja B (kolumna wyliczana + UNIQUE) zamknęłaby oba przypadki naraz.
+- UI: Verify przy `PENDING` i `REJECTED`, Reject przy `PENDING` i `VERIFIED`. Warunek „brak innego aktywnego” nie jest powtarzany w UI: 409 z backendu jest pokazywany pod listą, jak inne konflikty.
+
+**Zmiana istniejących testów (za zgodą właściciela, zmiana wymagania):**
+- `VehicleDocumentStatusTransitionsTest`: `REJECTED, VERIFIED` z `false` na `true`, nazwa metody uzupełniona.
+- `VehicleDocumentServiceTest.changeStatusThrowsConflictWhenTransitionIsNotAllowed`: przestawiony na nadal zabronione `REJECTED → PENDING`, z tą samą ścisłą asercją komunikatu.
+- `VehicleDocumentRulesIntegrationTest.changeStatusReturnsConflictWhenRejectedDocumentIsVerified` zastąpiony testem, w którym ten sam scenariusz daje 200.
+- `vehicle-document-list.spec.ts`: odrzucony wiersz pokazuje `['Verify']` zamiast `[]` (dwa testy).
+
+**Nowe testy (test-first, najpierw czerwone):**
+- Serwis: ponowna weryfikacja bez innego aktywnego dokumentu, 409 z innym aktywnym (status zostaje `REJECTED`, brak zapisu), brak zapytania `exists...` przy weryfikacji `PENDING`.
+- Integracja na prawdziwej bazie: odrzucony A i nowy B dają 409 przy weryfikacji A; po odrzuceniu B weryfikacja A daje 200, a weryfikacja B 409. `REJECTED → PENDING` daje 409.
+- Spec listy: weryfikacja odrzuconego dokumentu i pokazanie 409 „already has an active document”.
