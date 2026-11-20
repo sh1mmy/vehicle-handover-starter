@@ -80,17 +80,53 @@ class VehicleDocumentRulesIntegrationTest {
     }
 
     @Test
-    void changeStatusReturnsConflictWhenRejectedDocumentIsVerified() throws Exception {
+    void changeStatusVerifiesRejectedDocumentWhenNoOtherActiveDocumentOfTypeExists() throws Exception {
         Long documentId = create(INVOICE_BODY);
         changeStatus(documentId, "REJECTED")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
 
         changeStatus(documentId, "VERIFIED")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("VERIFIED"));
+        assertThat(documentRepository.findById(documentId).orElseThrow().getStatus())
+                .isEqualTo(VehicleDocumentStatus.VERIFIED);
+    }
+
+    @Test
+    void changeStatusVerifiesRejectedDocumentOnlyWhileNoOtherDocumentOfTypeIsActive() throws Exception {
+        // A rejected document came back corrected (director's decision): it can be verified again,
+        // but not next to another active document of the same type.
+        Long rejectedId = create(INVOICE_BODY);
+        changeStatus(rejectedId, "REJECTED").andExpect(status().isOk());
+        Long replacementId = create(INVOICE_BODY);
+
+        changeStatus(rejectedId, "VERIFIED")
                 .andExpect(status().isConflict())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail")
-                        .value("Document with id " + documentId + " cannot change status from REJECTED to VERIFIED"));
+                        .value("Vehicle with id " + vehicleId + " already has an active document of type INVOICE"));
+        assertThat(documentRepository.findById(rejectedId).orElseThrow().getStatus())
+                .isEqualTo(VehicleDocumentStatus.REJECTED);
+
+        changeStatus(replacementId, "REJECTED").andExpect(status().isOk());
+
+        changeStatus(rejectedId, "VERIFIED")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("VERIFIED"));
+
+        changeStatus(replacementId, "VERIFIED").andExpect(status().isConflict());
+    }
+
+    @Test
+    void changeStatusReturnsConflictWhenRejectedDocumentIsMovedBackToPending() throws Exception {
+        Long documentId = create(INVOICE_BODY);
+        changeStatus(documentId, "REJECTED").andExpect(status().isOk());
+
+        changeStatus(documentId, "PENDING")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail")
+                        .value("Document with id " + documentId + " cannot change status from REJECTED to PENDING"));
     }
 
     @Test

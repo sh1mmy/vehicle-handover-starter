@@ -37,12 +37,7 @@ public class VehicleDocumentService {
     @Transactional
     public VehicleDocumentResponse create(Long vehicleId, VehicleDocumentRequest request) {
         requireVehicle(vehicleId);
-        // Checked only here, in the transaction (INTENT.md Z8): H2 has no partial unique index.
-        if (documentRepository.existsByVehicleIdAndTypeAndStatusNot(vehicleId, request.type(),
-                VehicleDocumentStatus.REJECTED)) {
-            throw new ConflictException("Vehicle with id " + vehicleId + " already has an active document of type "
-                    + request.type());
-        }
+        requireNoActiveDocumentOfType(vehicleId, request.type());
         VehicleDocument document = documentRepository.save(VehicleDocumentMapper.toEntity(vehicleId, request));
         return VehicleDocumentMapper.toResponse(document);
     }
@@ -55,6 +50,10 @@ public class VehicleDocumentService {
             throw new ConflictException("Document with id " + id + " cannot change status from "
                     + document.getStatus() + " to " + request.status());
         }
+        if (document.getStatus() == VehicleDocumentStatus.REJECTED) {
+            // The rejected document itself is not active, so it does not count here.
+            requireNoActiveDocumentOfType(vehicleId, document.getType());
+        }
         document.changeStatus(request.status());
         return VehicleDocumentMapper.toResponse(documentRepository.save(document));
     }
@@ -62,6 +61,14 @@ public class VehicleDocumentService {
     private void requireVehicle(Long vehicleId) {
         if (!vehicleRepository.existsById(vehicleId)) {
             throw new NotFoundException("Vehicle with id " + vehicleId + " not found");
+        }
+    }
+
+    // Checked only here, in the transaction (INTENT.md Z8): H2 has no partial unique index.
+    private void requireNoActiveDocumentOfType(Long vehicleId, VehicleDocumentType type) {
+        if (documentRepository.existsByVehicleIdAndTypeAndStatusNot(vehicleId, type, VehicleDocumentStatus.REJECTED)) {
+            throw new ConflictException("Vehicle with id " + vehicleId + " already has an active document of type "
+                    + type);
         }
     }
 

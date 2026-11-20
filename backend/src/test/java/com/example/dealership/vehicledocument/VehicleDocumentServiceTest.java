@@ -159,11 +159,58 @@ class VehicleDocumentServiceTest {
         when(documentRepository.findByIdAndVehicleId(5L, 1L)).thenReturn(Optional.of(document));
 
         assertThatThrownBy(() -> documentService.changeStatus(1L, 5L,
-                new VehicleDocumentStatusRequest(VehicleDocumentStatus.VERIFIED)))
+                new VehicleDocumentStatusRequest(VehicleDocumentStatus.PENDING)))
                 .isInstanceOf(ConflictException.class)
-                .hasMessage("Document with id 5 cannot change status from REJECTED to VERIFIED");
+                .hasMessage("Document with id 5 cannot change status from REJECTED to PENDING");
         assertThat(document.getStatus()).isEqualTo(VehicleDocumentStatus.REJECTED);
         verify(documentRepository, never()).save(any());
+    }
+
+    @Test
+    void changeStatusVerifiesRejectedDocumentWhenNoOtherActiveDocumentOfTypeExists() {
+        VehicleDocument document = document(NUMBER);
+        document.changeStatus(VehicleDocumentStatus.REJECTED);
+        when(vehicleRepository.existsById(1L)).thenReturn(true);
+        when(documentRepository.findByIdAndVehicleId(5L, 1L)).thenReturn(Optional.of(document));
+        when(documentRepository.existsByVehicleIdAndTypeAndStatusNot(1L, VehicleDocumentType.OC_POLICY,
+                VehicleDocumentStatus.REJECTED)).thenReturn(false);
+        when(documentRepository.save(document)).thenReturn(document);
+
+        VehicleDocumentResponse response = documentService.changeStatus(1L, 5L,
+                new VehicleDocumentStatusRequest(VehicleDocumentStatus.VERIFIED));
+
+        assertThat(response.status()).isEqualTo(VehicleDocumentStatus.VERIFIED);
+        assertThat(document.getStatus()).isEqualTo(VehicleDocumentStatus.VERIFIED);
+        verify(documentRepository).save(document);
+    }
+
+    @Test
+    void changeStatusThrowsConflictWhenRejectedDocumentIsVerifiedAndAnotherActiveDocumentOfTypeExists() {
+        VehicleDocument document = document(NUMBER);
+        document.changeStatus(VehicleDocumentStatus.REJECTED);
+        when(vehicleRepository.existsById(1L)).thenReturn(true);
+        when(documentRepository.findByIdAndVehicleId(5L, 1L)).thenReturn(Optional.of(document));
+        when(documentRepository.existsByVehicleIdAndTypeAndStatusNot(1L, VehicleDocumentType.OC_POLICY,
+                VehicleDocumentStatus.REJECTED)).thenReturn(true);
+
+        assertThatThrownBy(() -> documentService.changeStatus(1L, 5L,
+                new VehicleDocumentStatusRequest(VehicleDocumentStatus.VERIFIED)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("Vehicle with id 1 already has an active document of type OC_POLICY");
+        assertThat(document.getStatus()).isEqualTo(VehicleDocumentStatus.REJECTED);
+        verify(documentRepository, never()).save(any());
+    }
+
+    @Test
+    void changeStatusDoesNotCheckOtherActiveDocumentsWhenPendingDocumentIsVerified() {
+        VehicleDocument document = document(NUMBER);
+        when(vehicleRepository.existsById(1L)).thenReturn(true);
+        when(documentRepository.findByIdAndVehicleId(5L, 1L)).thenReturn(Optional.of(document));
+        when(documentRepository.save(document)).thenReturn(document);
+
+        documentService.changeStatus(1L, 5L, new VehicleDocumentStatusRequest(VehicleDocumentStatus.VERIFIED));
+
+        verify(documentRepository, never()).existsByVehicleIdAndTypeAndStatusNot(any(), any(), any());
     }
 
     @Test

@@ -5,7 +5,8 @@ package com.example.dealership.vehicledocument;
  * <ul>
  *     <li>a pending document is verified or rejected;</li>
  *     <li>a verified document can still be rejected, e.g. an expired policy that is replaced by a new one;</li>
- *     <li>a rejected document never changes again; a correction is a new document (S1).</li>
+ *     <li>a rejected document can be verified again (director's decision, S1); that it is the only active document
+ *     of its type is checked by the service, because it needs the other documents of the vehicle.</li>
  * </ul>
  */
 public final class VehicleDocumentStatusTransitions {
@@ -17,7 +18,7 @@ public final class VehicleDocumentStatusTransitions {
         return switch (from) {
             case PENDING -> to == VehicleDocumentStatus.VERIFIED || to == VehicleDocumentStatus.REJECTED;
             case VERIFIED -> to == VehicleDocumentStatus.REJECTED;
-            case REJECTED -> false;
+            case REJECTED -> to == VehicleDocumentStatus.VERIFIED;
         };
     }
 }
