@@ -54,10 +54,45 @@ describe('VehicleDocumentList', () => {
     return Array.from(element.querySelectorAll('.error'), (error) => error.textContent!.trim());
   }
 
-  it('offers Verify for pending documents and Reject for pending and verified ones', () => {
+  it('offers Verify for pending and rejected documents and Reject for pending and verified ones', () => {
     expect(rowButtons(0)).toEqual(['Verify', 'Reject']);
     expect(rowButtons(1)).toEqual(['Reject']);
-    expect(rowButtons(2)).toEqual([]);
+    expect(rowButtons(2)).toEqual(['Verify']);
+  });
+
+  it('verifies a rejected document and reloads the list', async () => {
+    click(2, 'Verify');
+
+    const request = http.expectOne({ method: 'PUT', url: '/api/vehicles/1/documents/7/status' });
+    expect(request.request.body).toEqual({ status: 'VERIFIED' });
+    request.flush({ ...rejected, status: 'VERIFIED' });
+
+    await vi.waitFor(() =>
+      http
+        .expectOne({ method: 'GET', url: '/api/vehicles/1/documents' })
+        .flush([pending, verified, { ...rejected, status: 'VERIFIED' }]),
+    );
+    await fixture.whenStable();
+    expect(rowButtons(2)).toEqual(['Reject']);
+  });
+
+  it('shows the ProblemDetail detail when another document of the type is still active', async () => {
+    click(2, 'Verify');
+
+    http.expectOne({ method: 'PUT', url: '/api/vehicles/1/documents/7/status' }).flush(
+      {
+        title: 'Conflict',
+        status: 409,
+        detail: 'Vehicle with id 1 already has an active document of type OC_POLICY',
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+
+    await vi.waitFor(() =>
+      expect(errors()).toEqual([
+        'Vehicle with id 1 already has an active document of type OC_POLICY',
+      ]),
+    );
   });
 
   it('verifies a pending document and reloads the list', async () => {
@@ -89,7 +124,7 @@ describe('VehicleDocumentList', () => {
         .flush([pending, { ...verified, status: 'REJECTED' }]),
     );
     await fixture.whenStable();
-    expect(rowButtons(1)).toEqual([]);
+    expect(rowButtons(1)).toEqual(['Verify']);
   });
 
   it('rejects a pending document', async () => {

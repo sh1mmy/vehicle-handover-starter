@@ -37,7 +37,7 @@
           <td>{{ document.expiryDate ?? '—' }}</td>
           <td>{{ statusLabels[document.status] }}</td>
           <td>
-            @if (document.status === 'PENDING') {
+            @if (document.status !== 'VERIFIED') {
               <button type="button" (click)="changeStatus(document, 'VERIFIED')">Verify</button>
             }
             @if (document.status !== 'REJECTED') {
